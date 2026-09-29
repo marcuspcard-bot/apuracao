@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: apuracao
+      POSTGRES_PASSWORD: apuracao
+      POSTGRES_DB: apuracao
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - apuracao-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apuracao"]
+      interval: 3s
+      retries: 20
+volumes:
+  apuracao-postgres:
