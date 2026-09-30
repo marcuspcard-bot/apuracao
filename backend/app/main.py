@@ -8,12 +8,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.boletins import router
-from app.api.health import router as health_router
 from app.api.acompanhamento import router as acompanhamento_router
 from app.api.telao import admin_router as telao_router, public_router as divulgacao_router
 from app.core.config import get_settings
-from app.core.access import OperatorAccessMiddleware
-from app.core.monitoring import RequestLoggingMiddleware, configure_request_logging
 from app.core.request_limits import BodyLimitMiddleware, ImportCapacityMiddleware
 from app.services.pdf_processing import shutdown_pdf_pool
 from app.services.storage_service import StorageService, create_storage_client
@@ -22,7 +19,6 @@ from app.services.telao_realtime import ScreenEvents
 
 @asynccontextmanager
 async def lifespan(app):
-    configure_request_logging()
     with create_storage_client() as storage_client:
         app.state.storage = StorageService(storage_client)
         app.state.screen_events = ScreenEvents()
@@ -39,20 +35,16 @@ app.include_router(router)
 app.include_router(acompanhamento_router)
 app.include_router(telao_router)
 app.include_router(divulgacao_router)
-app.include_router(health_router)
 
 
 app.add_middleware(BodyLimitMiddleware)
 app.add_middleware(ImportCapacityMiddleware)
-app.add_middleware(OperatorAccessMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(filter(None, [get_settings().frontend_url, get_settings().operator_frontend_url])),
+    allow_origins=[get_settings().frontend_url],
     allow_methods=["GET", "POST", "PUT"],
     allow_headers=["Content-Type"],
-    expose_headers=["X-Request-ID"],
 )
-app.add_middleware(RequestLoggingMiddleware)
 
 
 @app.exception_handler(RequestValidationError)
@@ -75,5 +67,9 @@ async def unexpected_error(request: Request, exc: Exception):
     return JSONResponse(
         {"detail": "Não foi possível concluir a operação. Tente novamente."},
         status_code=500,
-        headers={"X-Request-ID": getattr(request.state, "request_id", "")},
     )
+
+
+@app.get("/health", tags=["Health"])
+def health():
+    return {"status": "ok"}

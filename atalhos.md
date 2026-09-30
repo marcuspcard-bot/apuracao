@@ -7,3 +7,19 @@ MATAR PROCESSO:
 #DESCOBRIR PORTA
 sudo fuser -k 5173/tcp
 
+#Limpar supabase
+BEGIN;
+
+DELETE FROM public.boletins;
+
+COMMIT;
+
+---------------------------------------------
+
+SELECT
+  (SELECT COUNT(*) FROM public.boletins) AS boletins,
+  (SELECT COUNT(*) FROM public.resultados) AS resultados,
+  (SELECT COUNT(*) FROM public.votos_candidatos) AS votos,
+  (SELECT COUNT(*) FROM public.boletim_secoes) AS secoes_importadas;
+
+-----------------------------

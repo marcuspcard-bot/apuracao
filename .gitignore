@@ -15,6 +15,3 @@ playwright-report/
 *.log
 
 .vercel/
-.backups/
-restic-cache/
-*.dump

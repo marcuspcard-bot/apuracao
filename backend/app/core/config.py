@@ -1,9 +1,7 @@
 from functools import lru_cache
-import re
-from typing import Literal
 
 from cryptography.fernet import Fernet
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +12,6 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "boletins"
     frontend_url: str = "http://localhost:5173"
-    operator_frontend_url: str = ""
     max_pdf_size_mb: int = Field(default=10, ge=1, le=50)
     preview_secret_key: str
     preview_ttl_seconds: int = Field(default=900, ge=60, le=3600)
@@ -31,18 +28,6 @@ class Settings(BaseSettings):
     storage_max_connections: int = Field(default=10, ge=5, le=50)
     storage_timeout_seconds: int = Field(default=45, ge=5, le=120)
     telao_realtime_enabled: bool = True
-    operator_access_mode: Literal["open", "proxy"] = "open"
-    operator_proxy_key: SecretStr = SecretStr("")
-
-    @model_validator(mode="after")
-    def valid_operator_access(self):
-        if self.operator_access_mode == "proxy" and not re.fullmatch(
-            r"[A-Za-z0-9_-]{43,128}", self.operator_proxy_key.get_secret_value()
-        ):
-            raise ValueError(
-                "OPERATOR_PROXY_KEY deve conter uma chave aleatoria de 43 a 128 caracteres."
-            )
-        return self
 
     @field_validator("preview_secret_key")
     @classmethod
@@ -56,12 +41,6 @@ class Settings(BaseSettings):
         if value == "*" or not value.startswith(("http://", "https://")):
             raise ValueError("FRONTEND_URL deve ser uma origem HTTP explicita.")
         return value.rstrip("/")
-
-    @field_validator("operator_frontend_url")
-    @classmethod
-    def valid_operator_origin(cls, value):
-        return cls.valid_origin(value) if value else ""
-
 
 @lru_cache
 def get_settings():

@@ -20,12 +20,6 @@ services:
         value: boletins
       - key: FRONTEND_URL
         sync: false
-      - key: OPERATOR_FRONTEND_URL
-        sync: false
-      - key: OPERATOR_ACCESS_MODE
-        value: "proxy"
-      - key: OPERATOR_PROXY_KEY
-        sync: false
       - key: PREVIEW_SECRET_KEY
         sync: false
       - key: MAX_PDF_SIZE_MB

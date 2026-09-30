@@ -1,5 +1,4 @@
 import { api } from './api'
-import { publicApi } from './publicApi'
 import type {
   AvailableCandidate,
   Disclosure,
@@ -38,5 +37,5 @@ export async function searchCandidates(
 }
 
 export async function getDisclosure(signal: AbortSignal): Promise<Disclosure> {
-  return (await publicApi.get('/api/divulgacao', { signal })).data
+  return (await api.get('/api/divulgacao', { signal, timeout: 15000 })).data
 }
