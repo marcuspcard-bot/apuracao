@@ -81,12 +81,7 @@ def storage():
 
 
 @pytest.fixture
-def client(engine, storage, monkeypatch):
-    from tests.auth_fixture import ADMIN_ID, TOKEN, fake_auth_request
-
-    monkeypatch.setattr(get_settings(), "admin_user_ids", ADMIN_ID)
-    monkeypatch.setattr("app.core.auth.auth_request", fake_auth_request)
-    monkeypatch.setattr("app.api.auth.auth_request", fake_auth_request)
+def client(engine, storage):
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE boletins, secoes_esperadas, telao_config CASCADE"))
 
@@ -96,8 +91,6 @@ def client(engine, storage, monkeypatch):
 
     app.dependency_overrides[get_db] = db_override
     app.dependency_overrides[get_storage] = lambda: storage
-    with TestClient(
-        app, client=("127.0.0.1", 50000), headers={"Authorization": f"Bearer {TOKEN}"}
-    ) as client:
+    with TestClient(app, client=("203.0.113.10", 50000)) as client:
         yield client
     app.dependency_overrides.clear()

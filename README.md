@@ -1,6 +1,6 @@
 # Importação de Boletins de Urna
 
-Aplicação React + FastAPI para importar PDFs do Boletim na Mão, conferir os resultados e salvar o boletim em PostgreSQL e o arquivo original em um bucket privado do Supabase. Inclui listagem, detalhes, acompanhamento parcial e telão configurável de Bacabal/MA em 2026, primeiro turno. A administração exige login pelo Supabase Auth e autorização por `ADMIN_USER_IDS`; o telão em `/divulgacao` permanece público. Veja [a configuração de produção](DEPLOY.md).
+Aplicação React + FastAPI para importar PDFs do Boletim na Mão, conferir os resultados e salvar o boletim em PostgreSQL e o arquivo original em um bucket privado do Supabase. Inclui listagem, detalhes, acompanhamento parcial e telão configurável de Bacabal/MA em 2026, primeiro turno. O acesso é sem login, conforme autorizado: qualquer pessoa que alcance a API pode consultar e importar boletins, substituir a lista de seções e configurar o telão. Veja [a configuração de produção](DEPLOY.md).
 
 ## Fluxo implementado
 
@@ -33,7 +33,7 @@ frontend/vercel.json       Rotas SPA e headers Vercel
 .github/workflows/ci.yml   Testes e build no GitHub Actions
 ```
 
-O PDF `Xangai_(ZZ)_-_0001_-_0483.pdf`, fornecido no diretório original, é o fixture de integração. A imagem `images (2).jpeg` também fornecida é usada como referência visual, com uma cópia em `frontend/public/`.
+O PDF `Xangai_(ZZ)_-_0001_-_0483.pdf`, fornecido no diretório original, é o fixture de integração. A imagem de referência visual está em `frontend/public/boletim-referencia.jpeg` e é usada na página de importação.
 
 ## Executar localmente
 
@@ -125,7 +125,6 @@ O serviço de desenvolvimento é temporário e não instala inicialização auto
 | `REQUEST_BODY_TIMEOUT_SECONDS` | Prazo total para receber o corpo de um POST/PUT: `120` segundos; envio incompleto retorna `408`. Não é o prazo da transação. |
 | `STORAGE_MAX_CONNECTIONS` | Limite do pool HTTP compartilhado com o Supabase Storage: `10`. |
 | `STORAGE_TIMEOUT_SECONDS` | Timeout de inatividade de leitura/escrita do Storage: `45` segundos; conexão: `10`, espera no pool: `5`. |
-| `ADMIN_USER_IDS` | UUIDs dos usuários Supabase Auth autorizados, separados por vírgula. Vazio bloqueia acesso administrativo. |
 | `TELAO_REALTIME_ENABLED` | Ativa a assinatura Supabase Realtime no backend, padrão `true`. O polling funciona independentemente dela. |
 | `PORT` | Porta injetada por Render/Railway, padrão `8000` no container. |
 
@@ -147,7 +146,7 @@ PostgreSQL e Supabase Storage não participam da mesma transação distribuída.
 
 Para incidentes, consulte os logs de compensação (bucket e caminho), suspenda temporariamente novas importações e confirme a ausência do hash em `boletins` antes de remover manualmente um órfão no painel Storage. Objetos com boletim associado devem ser preservados. Após um timeout de confirmação, confira a listagem antes de tentar novamente.
 
-As migrations ativam RLS nas tabelas da aplicação sem criar políticas públicas; use no backend o usuário proprietário ou um papel com BYPASSRLS. O frontend acessa somente FastAPI. Importação, listagem e abertura de PDFs exigem autenticação administrativa. CORS controla origens de navegadores, não funciona como autenticação. A validação confere estrutura e aritmética; não certifica autenticidade eleitoral ou a assinatura QR Code.
+As migrations ativam RLS nas tabelas da aplicação sem criar políticas públicas; use no backend o usuário proprietário ou um papel com BYPASSRLS. O frontend acessa somente FastAPI. Importação, listagem e abertura de PDFs não exigem login. O bucket continua privado, mas qualquer pessoa com acesso à API pode obter a URL temporária de um PDF salvo. CORS controla origens de navegadores, não funciona como autenticação. A validação confere estrutura e aritmética; não certifica autenticidade eleitoral ou a assinatura QR Code.
 
 ### Uso simultâneo e organização
 
@@ -165,7 +164,7 @@ Na atualização desta revisão, encerre as instâncias antigas antes de iniciar
 
 O acompanhamento agrega votos no PostgreSQL, sem carregar todas as linhas de candidatos na aplicação. Cada resposta fixa primeiro o conjunto de boletins confirmados para manter contagens, seções e votos coerentes durante novas importações. O hook `useAcompanhamento` atualiza a tela dez segundos após a resposta anterior, cancela consultas ao sair da página e mantém os dados anteriores identificados quando uma atualização falha.
 
-Antes de liberar o acesso à equipe pela internet, coloque frontend **e API** atrás de um controle de acesso confiável. A aplicação não cria contas nem identifica o responsável por cada importação.
+Esta versão não autentica usuários nem identifica o responsável por cada importação. Se for necessário restringir o acesso à equipe, a restrição deve cobrir frontend **e API**, por exemplo em uma rede privada; esconder apenas o endereço do site não protege os endpoints.
 
 ### Resposta de confirmação perdida
 
@@ -180,12 +179,12 @@ Os cinco computadores devem usar a mesma aplicação HTTPS, apontando para a mes
 Antes da operação remota:
 
 1. Publique frontend e API com HTTPS; configure `VITE_API_URL` e a origem exata em `FRONTEND_URL`, sem chaves do Supabase no navegador.
-2. Configure `ADMIN_USER_IDS` com os UUIDs dos operadores autorizados no Supabase Auth. Os endpoints administrativos exigem login; os limites de carga e CORS não substituem essa autorização.
+2. Não é necessário criar contas no Supabase Auth. Confirme a exposição desejada: sem restrição externa, qualquer pessoa que alcance a API pode importar boletins e modificar o cadastro de seções e o telão. CORS e limites de carga não são controle de acesso.
 3. Configure o proxy para aceitar o tamanho do token de confirmação (ao menos 21 MB para PDFs de 10 MB), sem repetir automaticamente POSTs, e confira seus timeouts. Um proxy com prazo menor pode acionar a recuperação por hash mesmo com o backend ainda trabalhando.
 4. Mantenha o mesmo `PREVIEW_SECRET_KEY` nas instâncias, bucket privado e pool de banco dentro do limite contratado. Não aumente réplicas ou workers sem recalcular o total de conexões.
 5. Faça um ensaio com os cinco computadores e os PDFs reais, verificando listagem, soma e abertura dos originais. Os testes automatizados simulam concorrência e falhas, mas não substituem medir as redes reais dos operadores.
 
-A configuração administrativa do telão mantém sua restrição de rede própria; não foi aberta à internet nem foi reintroduzido login. Esta revisão não publica serviços na nuvem, não altera o parser e não exige migration ou limpeza do banco.
+A configuração do telão segue o mesmo acesso sem login das outras páginas; não há bloqueio por usuário ou por rede na aplicação. A remoção do login não publica serviços na nuvem, não altera o parser e não exige migration ou limpeza do banco.
 
 ## Parser e validação
 
@@ -364,7 +363,7 @@ Os testes de navegador usam o PostgreSQL local por padrão, nunca o `DATABASE_UR
 
 ## Configuração e Divulgação no Telão
 
-`/configuracao-telao` exige login administrativo. A busca consulta candidatos de boletins confirmados de **Bacabal/MA, zona 0013, 04/10/2026, primeiro turno**. O filtro é aplicado no backend e não pode ser substituído por parâmetros do navegador. Sem boletins desse escopo, a busca fica vazia; nenhum candidato é inventado ou selecionado automaticamente.
+`/configuracao-telao` abre diretamente, sem login. A busca consulta candidatos de boletins confirmados de **Bacabal/MA, zona 0013, 04/10/2026, primeiro turno**. O filtro é aplicado no backend e não pode ser substituído por parâmetros do navegador. Sem boletins desse escopo, a busca fica vazia; nenhum candidato é inventado ou selecionado automaticamente.
 
 É possível adicionar candidatos de qualquer cargo reconhecido, inclusive vários senadores, mover para cima/baixo, ocultar ou remover apenas da exibição. **Salvar configuração do telão** persiste a lista e a ordem em uma única transação. **Visualizar telão** abre `/divulgacao` em outra aba. Cards por página (1 a 12) e rotação (5 a 300 segundos) são configuráveis; telas menores exibem menos cards por página para preservar a leitura. Os padrões são seis cards e dez segundos.
 
@@ -380,19 +379,21 @@ Um lock transacional e o campo `versao` evitam sobrescrita silenciosa por operad
 
 | Método | Endpoint | Acesso |
 | --- | --- | --- |
-| `GET` | `/api/telao/config` | Configuração, seleção e versão; login administrativo. |
-| `PUT` / `POST` | `/api/telao/config` | Salva configuração completa de forma atômica; login administrativo. |
-| `GET` | `/api/telao/candidatos-disponiveis?cargo=SENADOR&q=123&offset=0&limit=20` | Busca paginada por cargo, número ou nome; login administrativo. |
+| `GET` | `/api/telao/config` | Configuração, seleção e versão; sem login. |
+| `PUT` / `POST` | `/api/telao/config` | Salva configuração completa de forma atômica; sem login. |
+| `GET` | `/api/telao/candidatos-disponiveis?cargo=SENADOR&q=123&offset=0&limit=20` | Busca paginada por cargo, número ou nome; sem login. |
 | `GET` | `/api/divulgacao` | Somente leitura; candidatos selecionados, votos e contadores. |
 | `GET` | `/api/divulgacao/eventos` | SSE; transmite apenas notificações de mudança, nunca registros eleitorais ou credenciais. |
 
-### Login administrativo
+### Acesso sem login
 
-O Supabase Auth valida e-mail e senha. Crie o usuário no painel do Supabase e configure seu UUID em `ADMIN_USER_IDS` no backend. Um usuário cadastrado sem esse UUID autorizado não pode administrar o sistema. Não há cadastro público na interface.
+Não há tela de entrada, botão de sair, sessão ou envio de tokens de usuário. As rotas `/api/auth/login`, `/api/auth/me` e `/api/auth/logout` foram removidas. O frontend descarta somente a antiga chave `apuracao.admin.session`, preservando outros dados do navegador, e funciona mesmo quando o armazenamento da aba está indisponível.
 
-As rotas de boletins, acompanhamento e configuração do telão exigem um token validado pelo Supabase em cada requisição. A API permanece bloqueada quando a configuração está incompleta. O telão e seus endpoints de divulgação são públicos. CORS permite `Authorization` para a origem definida em `FRONTEND_URL`.
+As rotas de boletins, acompanhamento e configuração do telão funcionam sem credenciais de usuário, incluindo clientes fora da rede local. `ADMIN_USER_IDS` não é mais usado e pode ser removido das configurações do provedor. Não é necessário criar nem excluir usuários no Supabase para operar esta versão.
 
-A sessão fica no `sessionStorage` da aba, sem senha nem refresh token. Ao expirar, é necessário entrar novamente. Sair remove a sessão da aba e solicita logout ao Supabase; tokens de acesso já emitidos podem continuar válidos até sua expiração. A recuperação de senha é feita pelo administrador no painel do Supabase nesta versão. Consulte [DEPLOY.md](DEPLOY.md).
+As credenciais de banco e de serviço do Supabase continuam somente no backend. Bucket privado, RLS, URLs temporárias, validação de prévias, duplicidades e limites de carga permanecem. Essas proteções não restringem quem pode usar a API. Para atualizar uma instalação existente, publique backend e frontend; o código local não atualiza automaticamente Vercel ou Render. Consulte [DEPLOY.md](DEPLOY.md).
+
+`backend/tests/test_public_access.py` cobre consultas e importação sem credenciais, remoção das rotas de login, validação e concorrência de configuração, e CORS. O cliente compartilhado dos testes de API não usa token e simula um IP externo. `frontend/tests/public-access.spec.ts` verifica navegação direta, recarga, descarte de sessão antiga e armazenamento indisponível; as importações simultâneas usam cinco contextos novos sem sessão.
 
 ### Atualização Automática
 
@@ -404,6 +405,6 @@ Referências oficiais: [Postgres Changes no Supabase Realtime](https://supabase.
 
 ### Testes do Telão
 
-`backend/tests/test_telao.py` cobre escopo municipal/zona/data/turno, seleção manual e zero votos, múltiplos cargos e senadores, ordenação, remoção sem excluir votos, concorrência, RLS, acesso autenticado, prévia/confirmação, duplicidades, inconsistências, cobertura sem multiplicar votos e invalidação Realtime. Os testes existentes de migration também verificam os novos modelos contra o Alembic.
+`backend/tests/test_telao.py` cobre escopo municipal/zona/data/turno, seleção manual e zero votos, múltiplos cargos e senadores, ordenação, remoção sem excluir votos, concorrência, RLS, acesso sem login, prévia/confirmação, duplicidades, inconsistências, cobertura sem multiplicar votos e invalidação Realtime. Os testes existentes de migration também verificam os novos modelos contra o Alembic.
 
-`frontend/tests/telao.spec.ts` cobre configuração autenticada, busca e ordem, SSE real de configuração, importação confirmada atualizando o telão, debounce, polling, falha temporária sem zerar votos, estados vazios, rotação, Fullscreen API e layouts 1920x1080, 1366x768, 3840x2160, tablet e celular. PDFs e respostas sintéticas desses testes não são inseridos no Supabase.
+`frontend/tests/telao.spec.ts` cobre configuração sem login, busca e ordem, SSE real de configuração, importação confirmada atualizando o telão, debounce, polling, falha temporária sem zerar votos, estados vazios, rotação, Fullscreen API e layouts 1920x1080, 1366x768, 3840x2160, tablet e celular. PDFs e respostas sintéticas desses testes não são inseridos no Supabase.

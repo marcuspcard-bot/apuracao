@@ -1,6 +1,5 @@
-import { test, expect, type Page, type Browser } from './fixtures'
+import { test, expect, type Page, type Browser } from '@playwright/test'
 import path from 'node:path'
-import { adminSession } from './fixtures'
 
 const api = 'http://127.0.0.1:8001'
 
@@ -18,7 +17,6 @@ async function operators(browser: Browser, baseURL: string | undefined) {
   const contexts = await Promise.all(
     Array.from({ length: 5 }, () => browser.newContext({ baseURL })),
   )
-  await Promise.all(contexts.map(adminSession))
   return {
     pages: await Promise.all(contexts.map((context) => context.newPage())),
     close: () => Promise.all(contexts.map((context) => context.close())),

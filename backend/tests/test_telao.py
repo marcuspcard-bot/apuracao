@@ -2,13 +2,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
-import pytest
-from fastapi import HTTPException
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
-from starlette.requests import Request
-
-from app.core.telao_access import require_admin_network
 from app.models import Boletim, CandidatoVoto, Resultado, TelaoCandidato, TelaoConfig
 from app.schemas.boletim import Candidato, ResultadoVaga
 from app.services import divulgacao_service
@@ -19,11 +14,8 @@ from app.services.pdf_reader import extract_text_from_pdf
 from tests.test_acompanhamento import cargo, seed
 from tests.test_section_registry import confirm_list, preview_list
 
-ADMIN = {"X-Telao-Admin": "1"}
-
-
 def configuration(client):
-    response = client.get("/api/telao/config", headers=ADMIN)
+    response = client.get("/api/telao/config")
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -37,7 +29,7 @@ def save(client, candidates, version=None, **options):
         "candidatos": [{"cargo": office, "numero": number} for office, number in candidates],
         **options,
     }
-    return client.put("/api/telao/config", headers=ADMIN, json=body)
+    return client.put("/api/telao/config", json=body)
 
 
 def screen(client):
@@ -142,13 +134,13 @@ def test_canonical_scope_numbers_and_search_do_not_duplicate_candidates(client, 
     seed(engine, pdf, zone="0066", cargos=[cargo("DEPUTADO FEDERAL", "9999", 90, "OUTRA ZONA")])
     url = "/api/telao/candidatos-disponiveis"
     data = client.get(
-        url, headers=ADMIN, params={"cargo": " deputado  federal ", "q": "joão"}
+        url, params={"cargo": " deputado  federal ", "q": "joão"}
     ).json()
     assert len(data["candidatos"]) == 1
     assert data["candidatos"][0]["numero"] == "0123"
     assert data["tem_mais"] is False
     assert (
-        client.get(url, headers=ADMIN, params={"cargo": "DEPUTADO FEDERAL", "q": "%"}).json()[
+        client.get(url, params={"cargo": "DEPUTADO FEDERAL", "q": "%"}).json()[
             "candidatos"
         ]
         == []
@@ -309,22 +301,6 @@ def test_snapshot_during_concurrent_import(client, engine, pdf, monkeypatch):
     assert data["candidatos"][0]["votos"] == 10
     monkeypatch.setattr(divulgacao_service, "_bulletins", load)
     assert screen(client)["candidatos"][0]["votos"] == 30
-
-
-@pytest.mark.parametrize("headers", [{"Authorization": ""}, {"Authorization": "Bearer invalid"}])
-def test_administrative_routes_reject_untrusted_requests(client, headers):
-    assert client.get("/api/telao/config", headers=headers).status_code == 401
-    assert client.put("/api/telao/config", headers=headers, json={}).status_code == 401
-    assert client.get("/api/divulgacao", headers=headers).status_code == 200
-
-
-def test_admin_access_requires_login_even_on_private_network():
-    request = Request(
-        {"type": "http", "client": ("127.0.0.1", 50000), "headers": [(b"x-telao-admin", b"1")]}
-    )
-    with pytest.raises(HTTPException) as exc:
-        require_admin_network(request)
-    assert exc.value.status_code == 401
 
 
 def test_new_tables_are_private_and_have_only_configuration_rows(client, engine):

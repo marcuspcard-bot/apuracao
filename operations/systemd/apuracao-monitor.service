@@ -1,0 +1,11 @@
+[Unit]
+Description=Verificacao da API, banco, protecao, storage e backups
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=3min
+ExecStart=/usr/bin/docker run --rm --init --name apuracao-monitor-job --env-file /etc/apuracao-operations.env apuracao-ops:local monitor
+ExecStopPost=-/usr/bin/docker rm --force apuracao-monitor-job

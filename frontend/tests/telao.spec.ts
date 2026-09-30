@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fixtures'
+import { test, expect, type Page } from '@playwright/test'
 import path from 'node:path'
 import type { Disclosure, ScreenConfig } from '../src/types/telao'
 
@@ -97,7 +97,7 @@ async function expectFitted(page: Page) {
     .toEqual([])
 }
 
-test('configuração autenticada, ordem manual, SSE real e votos após confirmação do PDF', async ({
+test('configuração sem login, ordem manual, SSE real e votos após confirmação do PDF', async ({
   page,
   context,
   request,
@@ -178,11 +178,11 @@ test('configuração autenticada, ordem manual, SSE real e votos após confirma�
     ).toBeVisible()
     await screen.clock.runFor(1500)
     await expect(screen.locator('.disclosure-candidate')).toHaveCount(2)
-    const forbidden = await request.put(
+    const invalid = await request.put(
       'http://127.0.0.1:8001/api/telao/config',
-      { data: {}, headers: { Authorization: "" } },
+      { data: {} },
     )
-    expect(forbidden.status()).toBe(401)
+    expect(invalid.status()).toBe(422)
 
     const importer = await context.newPage()
     try {

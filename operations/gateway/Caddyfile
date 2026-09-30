@@ -1,0 +1,20 @@
+{
+	admin off
+}
+
+# Loopback only: publish through Tailscale Serve, NEVER Funnel or a public port.
+http://127.0.0.1:8787 {
+	bind 127.0.0.1
+	@api path /api/* /health /ready /docs /docs/* /openapi.json /redoc
+	handle @api {
+		reverse_proxy {$API_UPSTREAM} {
+			header_up Host {upstream_hostport}
+			header_up X-Operator-Proxy-Key {$OPERATOR_PROXY_KEY}
+		}
+	}
+	handle {
+		reverse_proxy {$FRONTEND_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+}

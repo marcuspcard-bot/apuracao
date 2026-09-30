@@ -1246,11 +1246,3 @@ footer {
     padding: 12px;
   }
 }
-
-.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-.login-card { width: 100%; max-width: 420px; display: grid; gap: 16px; padding: 32px; background: white; border: 1px solid var(--border); border-radius: 16px; }
-.login-card h1, .login-card p { margin: 0; }
-.login-card input { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font: inherit; }
-.login-card [role="alert"] { color: #a32020; }
-.admin-session { display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding: 8px 24px; background: white; border-bottom: 1px solid var(--border); }
-.admin-session button { padding: 8px 16px; cursor: pointer; }

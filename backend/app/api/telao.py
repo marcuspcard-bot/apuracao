@@ -6,7 +6,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.telao_access import require_admin_network
 from app.schemas.telao import (
     AvailableCandidates,
     DivulgacaoResponse,
@@ -22,9 +21,7 @@ from app.services.telao_service import (
     save_config,
 )
 
-admin_router = APIRouter(
-    prefix="/api/telao", tags=["Telão"], dependencies=[Depends(require_admin_network)]
-)
+admin_router = APIRouter(prefix="/api/telao", tags=["Telão"])
 public_router = APIRouter(prefix="/api/divulgacao", tags=["Divulgação"])
 
 

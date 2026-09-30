@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { accessToken, clearSession } from './session'
 import type { BoletimDetail, BoletimSummary, Preview } from '../types/boletim'
 import type {
   Overview,
@@ -16,22 +15,8 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   if (!import.meta.env.VITE_API_URL)
     throw new Error('O endereço da API não foi configurado.')
-  const token = accessToken()
-  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (
-      (error.response?.status === 401 || error.response?.status === 403) &&
-      error.config?.url !== '/api/auth/login'
-    )
-      clearSession()
-    return Promise.reject(error)
-  },
-)
 
 export async function sendPdf(
   file: File,

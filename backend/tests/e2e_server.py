@@ -24,15 +24,6 @@ from tests.multicargo_fixture import document_text, render_pdf, OFFICES, office_
 from tests.test_sections import standalone_text
 from tests.acompanhamento_fixture import bacabal_text
 
-from tests.auth_fixture import ADMIN_ID, fake_auth_request
-import app.core.auth as auth_core
-import app.api.auth as auth_api
-
-auth_core.auth_request = fake_auth_request
-auth_api.auth_request = fake_auth_request
-os.environ["ADMIN_USER_IDS"] = ADMIN_ID
-get_settings.cache_clear()
-
 schema = "e2e_" + uuid4().hex
 url = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://apuracao:apuracao@localhost:55432/apuracao"

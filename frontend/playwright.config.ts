@@ -6,7 +6,6 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5174',
     trace: 'retain-on-failure',
-    extraHTTPHeaders: { Authorization: 'Bearer isolated-test-admin-token' },
   },
   webServer: [
     {
@@ -18,7 +17,7 @@ export default defineConfig({
     },
     {
       command:
-        'VITE_API_URL=http://127.0.0.1:8001 npm run dev -- --port 5174 --strictPort',
+        'VITE_API_URL=http://127.0.0.1:8001 VITE_PUBLIC_API_URL=http://localhost:8001 npm run dev -- --port 5174 --strictPort',
       url: 'http://localhost:5174',
       reuseExistingServer: false,
       gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },

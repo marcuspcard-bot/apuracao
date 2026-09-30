@@ -10,8 +10,6 @@ services:
     healthCheckPath: /health
     preDeployCommand: alembic upgrade head
     envVars:
-      - key: ADMIN_USER_IDS
-        sync: false
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL
@@ -21,6 +19,12 @@ services:
       - key: SUPABASE_STORAGE_BUCKET
         value: boletins
       - key: FRONTEND_URL
+        sync: false
+      - key: OPERATOR_FRONTEND_URL
+        sync: false
+      - key: OPERATOR_ACCESS_MODE
+        value: "proxy"
+      - key: OPERATOR_PROXY_KEY
         sync: false
       - key: PREVIEW_SECRET_KEY
         sync: false

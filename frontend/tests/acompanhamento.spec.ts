@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect } from '@playwright/test'
 import path from 'node:path'
 
 function overview(votes = 30) {

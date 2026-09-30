@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect } from '@playwright/test'
 import path from 'node:path'
 
 const pdf = path.resolve('../Xangai_(ZZ)_-_0001_-_0483.pdf')

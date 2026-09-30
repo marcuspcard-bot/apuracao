@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getDisclosure } from '../services/telao'
+import { publicApiUrl } from '../services/publicApi'
 import type { Disclosure } from '../types/telao'
 
 export function useDivulgacao() {
@@ -45,9 +46,8 @@ export function useDivulgacao() {
 
     void refresh()
     // The backend relays only invalidations. Supabase credentials never reach the browser.
-    const base = import.meta.env.VITE_API_URL?.replace(/\/$/, '')
-    const events = base
-      ? new EventSource(`${base}/api/divulgacao/eventos`)
+    const events = publicApiUrl
+      ? new EventSource(`${publicApiUrl}/api/divulgacao/eventos`)
       : null
     events?.addEventListener('update', changed)
     events?.addEventListener('open', changed)
