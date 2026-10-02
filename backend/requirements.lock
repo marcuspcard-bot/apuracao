@@ -18,6 +18,7 @@ iniconfig==2.3.0
 Mako==1.4.3
 MarkupSafe==3.0.3
 packaging==26.3
+Pillow==12.3.0
 pluggy==1.6.0
 psycopg==3.3.3
 psycopg-binary==3.3.3

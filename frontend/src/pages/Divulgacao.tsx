@@ -1,16 +1,36 @@
-import { useEffect, useState } from 'react'
-import { FileCheck2, Maximize, Minimize, Monitor } from 'lucide-react'
+import { useEffect, useState, type CSSProperties } from 'react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize,
+  Minimize,
+  Monitor,
+} from 'lucide-react'
 import { useDivulgacao } from '../hooks/useDivulgacao'
 import { ScreenText } from '../components/ScreenText'
+import { CandidatePhoto } from '../components/CandidatePhoto'
 import { formatNumber } from '../services/api'
 import '../telao.css'
 
+const accents = [
+  '#59d05b',
+  '#5e9bff',
+  '#ff6578',
+  '#b6de45',
+  '#8b92ff',
+  '#f5bf59',
+]
+
 function capacity() {
-  if (window.innerWidth < 600) return window.innerHeight < 700 ? 1 : 2
-  if (window.innerHeight < 650) return 2
-  if (window.innerWidth < 1100) return 4
-  if (window.innerWidth >= 2400 && window.innerHeight >= 1300) return 12
-  return 6
+  return Math.max(
+    1,
+    Math.min(
+      12,
+      Math.floor(
+        (window.innerHeight - 190) / (window.innerWidth < 600 ? 76 : 100),
+      ),
+    ),
+  )
 }
 
 export function Divulgacao() {
@@ -28,6 +48,13 @@ export function Divulgacao() {
       (currentPage + 1) * perPage,
     ) ?? []
   const selection = data?.candidatos.map((c) => c.id).join(',') ?? ''
+  const counted = data?.urnas_apuradas ?? 0
+  const total = data?.total_urnas
+  const progress = total != null && total > 0 ? (counted / total) * 100 : null
+  const percentage = progress?.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })
 
   useEffect(() => {
     const resize = () => setLimit(capacity())
@@ -39,7 +66,6 @@ export function Divulgacao() {
       document.removeEventListener('fullscreenchange', changed)
     }
   }, [])
-
   useEffect(() => {
     setPage(0)
   }, [selection, perPage])
@@ -78,62 +104,47 @@ export function Divulgacao() {
   return (
     <div className={`disclosure-screen${fullscreen ? ' is-fullscreen' : ''}`}>
       <header className="disclosure-header">
-        <div className="disclosure-identity">
-          <span className="screen-brand">
-            <FileCheck2 size={19} />
-            BOLETINS / DIVULGAÇÃO
-          </span>
-          <h1>BACABAL - MA</h1>
-          <p>ZONA ELEITORAL 0013</p>
-        </div>
-        <div className="disclosure-heading">
-          <h2>RESULTADOS PARCIAIS DOS BOLETINS RECEBIDOS</h2>
-          {data && (
-            <span>
-              {new Date(`${data.eleicao_data}T12:00:00`).toLocaleDateString(
-                'pt-BR',
-              )}{' '}
-              · {data.eleicao_turno}º turno
-            </span>
-          )}
-        </div>
+        <h1>
+          Eleições {data?.eleicao_data.slice(0, 4) ?? '2026'} · Bacabal-MA
+        </h1>
         <button
           className="screen-fullscreen"
           title={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
           aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
           onClick={() => void toggleFullscreen()}
         >
-          {fullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+          {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
         </button>
       </header>
-      <div className="disclosure-summary">
-        <dl>
-          <div>
-            <dt>BOLETINS RECEBIDOS</dt>
-            <dd>{data ? formatNumber(data.boletins_recebidos) : '--'}</dd>
-          </div>
-          <div>
-            <dt>
-              {data?.total_secoes_esperadas != null
-                ? 'SEÇÕES REPRESENTADAS / ESPERADAS'
-                : 'SEÇÕES REPRESENTADAS'}
-            </dt>
-            <dd>
-              {data ? formatNumber(data.secoes_representadas) : '--'}
-              {data?.total_secoes_esperadas != null && (
-                <span> / {formatNumber(data.total_secoes_esperadas)}</span>
-              )}
-            </dd>
-          </div>
-          <div className="screen-last-update">
-            <dt>ÚLTIMA ATUALIZAÇÃO</dt>
-            <dd>
-              {data
-                ? new Date(data.ultima_atualizacao).toLocaleTimeString('pt-BR')
-                : '--'}
-            </dd>
-          </div>
-        </dl>
+      <section className="disclosure-summary" aria-label="Apuração das urnas">
+        <div className="screen-coverage-heading">
+          <span>Urnas apuradas</span>
+          <strong>
+            {data ? formatNumber(counted) : '--'}
+            {total != null && <> de {formatNumber(total)}</>}
+            {percentage != null && (
+              <>
+                {' '}
+                <span className="coverage-separator">·</span> {percentage}%
+              </>
+            )}
+          </strong>
+        </div>
+        <div
+          className="screen-coverage-track"
+          role="progressbar"
+          aria-label="Urnas apuradas"
+          aria-valuemin={0}
+          aria-valuemax={total ?? undefined}
+          aria-valuenow={total != null ? counted : undefined}
+          aria-valuetext={
+            total != null
+              ? `${counted} de ${total} urnas apuradas`
+              : 'Total de urnas não cadastrado'
+          }
+        >
+          <span style={{ width: `${Math.min(100, progress ?? 0)}%` }} />
+        </div>
         <div
           className={`disclosure-connection${error ? ' stale' : ''}`}
           role="status"
@@ -143,9 +154,11 @@ export function Divulgacao() {
               ? 'Não foi possível atualizar os dados. Tentando novamente...'
               : data && data.boletins_recebidos === 0
                 ? 'Aguardando recebimento dos boletins.'
-                : '\u00a0')}
+                : data && total == null
+                  ? 'Total de urnas não cadastrado.'
+                  : '\u00a0')}
         </div>
-      </div>
+      </section>
       <main className="disclosure-main" id="main">
         {state ? (
           <div className="disclosure-empty" role="status">
@@ -154,32 +167,58 @@ export function Divulgacao() {
           </div>
         ) : (
           <div
-            className={`disclosure-grid count-${visible.length}`}
+            className="disclosure-grid"
             aria-label="Candidatos do telão"
+            style={{
+              gridTemplateRows: `repeat(${visible.length}, minmax(0, 1fr))`,
+            }}
           >
             {visible.map((candidate) => (
               <article
                 className="disclosure-candidate"
                 key={candidate.id}
                 data-office={candidate.cargo}
+                style={
+                  {
+                    '--accent': accents[(candidate.ordem - 1) % accents.length],
+                  } as CSSProperties
+                }
                 aria-label={`${candidate.cargo} - ${candidate.numero} - ${candidate.nome}`}
               >
-                <div className="screen-candidate-office">
-                  <ScreenText text={candidate.cargo} maxSize={19} />
+                <CandidatePhoto
+                  source={candidate.foto_url}
+                  name={candidate.nome}
+                />
+                <div className="screen-candidate-details">
+                  <div className="screen-candidate-office">
+                    <ScreenText
+                      text={candidate.cargo}
+                      maxSize={22}
+                      minSize={9}
+                    />
+                  </div>
+                  <h2 className="screen-candidate-name">
+                    <ScreenText
+                      text={candidate.nome}
+                      maxSize={30}
+                      minSize={9}
+                    />
+                  </h2>
+                  <div className="screen-candidate-number">
+                    <ScreenText
+                      text={candidate.numero}
+                      maxSize={18}
+                      minSize={10}
+                    />
+                  </div>
                 </div>
-                <div className="screen-candidate-number">
-                  <ScreenText text={candidate.numero} maxSize={34} />
-                </div>
-                <h3 className="screen-candidate-name">
-                  <ScreenText text={candidate.nome} maxSize={32} minSize={13} />
-                </h3>
                 <div className="screen-candidate-votes" aria-live="polite">
                   <ScreenText
                     className="vote-value"
                     text={formatNumber(candidate.votos)}
                     suffix="VOTOS"
-                    maxSize={76}
-                    minSize={20}
+                    maxSize={84}
+                    minSize={10}
                   />
                 </div>
               </article>
@@ -189,21 +228,41 @@ export function Divulgacao() {
       </main>
       <footer className="disclosure-footer">
         <div>
-          <p>
-            Resultados parciais baseados nos Boletins de Urna inseridos no
-            sistema.
+          <p className="screen-updated">
+            Atualizado às{' '}
+            {data
+              ? new Date(data.ultima_atualizacao).toLocaleTimeString('pt-BR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '--:--'}
           </p>
-          <p>Dados sujeitos à inclusão de novos boletins.</p>
-          <p>Consulte a Justiça Eleitoral para o resultado oficial.</p>
+          <p>
+            Resultados parciais.{' '}
+            <span>Consulte a Justiça Eleitoral para o resultado oficial.</span>
+          </p>
         </div>
-        <div className="disclosure-footer-meta">
-          <strong>Bacabal - MA | Zona Eleitoral 0013</strong>
-          {pages > 1 && (
+        {pages > 1 && (
+          <div className="screen-pagination">
+            <button
+              title="Página anterior"
+              aria-label="Página anterior"
+              onClick={() => setPage((currentPage + pages - 1) % pages)}
+            >
+              <ChevronLeft size={18} />
+            </button>
             <span className="screen-page" aria-live="polite">
               Página {currentPage + 1} / {pages}
             </span>
-          )}
-        </div>
+            <button
+              title="Próxima página"
+              aria-label="Próxima página"
+              onClick={() => setPage((currentPage + 1) % pages)}
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
       </footer>
     </div>
   )

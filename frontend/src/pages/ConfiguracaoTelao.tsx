@@ -19,6 +19,7 @@ import {
   searchCandidates,
 } from '../services/telao'
 import type { AvailableCandidate, ScreenConfig } from '../types/telao'
+import { CandidatePhotoEditor } from '../components/CandidatePhotoEditor'
 import '../telao.css'
 
 export function ConfiguracaoTelao() {
@@ -36,6 +37,7 @@ export function ConfiguracaoTelao() {
   const [loading, setLoading] = useState(true)
   const [dirty, setDirty] = useState(false)
   const [reload, setReload] = useState(0)
+  const [photoBusy, setPhotoBusy] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -110,8 +112,25 @@ export function ConfiguracaoTelao() {
     change({ candidatos: items })
   }
 
+  function changePhoto(cargo: string, numero: string, foto: string | null) {
+    setConfig((current) =>
+      current
+        ? {
+            ...current,
+            candidatos: current.candidatos.map((candidate) =>
+              candidate.cargo === cargo && candidate.numero === numero
+                ? { ...candidate, foto }
+                : candidate,
+            ),
+          }
+        : current,
+    )
+    setDirty(true)
+    setSuccess('')
+  }
+
   async function save() {
-    if (!config || saving) return
+    if (!config || saving || photoBusy) return
     setSaving(true)
     setError('')
     setSuccess('')
@@ -121,10 +140,11 @@ export function ConfiguracaoTelao() {
         cards_por_pagina: config.cards_por_pagina,
         tempo_rotacao_segundos: config.tempo_rotacao_segundos,
         ativo: config.ativo,
-        candidatos: config.candidatos.map(({ cargo, numero, ativo }) => ({
+        candidatos: config.candidatos.map(({ cargo, numero, ativo, foto }) => ({
           cargo,
           numero,
           ativo,
+          ...(foto !== undefined ? { foto } : {}),
         })),
       })
       setConfig(next)
@@ -164,7 +184,7 @@ export function ConfiguracaoTelao() {
           {error}
           <button
             className="button"
-            disabled={saving || loading}
+            disabled={saving || loading || photoBusy}
             onClick={() => {
               setSuccess('')
               setReload((n) => n + 1)
@@ -352,7 +372,18 @@ export function ConfiguracaoTelao() {
               <ol className="screen-selection-list">
                 {config.candidatos.map((candidate, index) => (
                   <li key={`${candidate.cargo}:${candidate.numero}`}>
-                    <span className="selection-order">{index + 1}</span>
+                    <div className="selection-portrait">
+                      <CandidatePhotoEditor
+                        candidate={candidate}
+                        disabled={saving || photoBusy}
+                        onBusy={setPhotoBusy}
+                        onError={setError}
+                        onChange={(foto) =>
+                          changePhoto(candidate.cargo, candidate.numero, foto)
+                        }
+                      />
+                      <span className="selection-order">{index + 1}</span>
+                    </div>
                     <div className="selection-name">
                       <span className="eyebrow">{candidate.cargo}</span>
                       <strong>
@@ -428,6 +459,7 @@ export function ConfiguracaoTelao() {
               className="button primary"
               disabled={
                 saving ||
+                photoBusy ||
                 !dirty ||
                 config.cards_por_pagina < 1 ||
                 config.cards_por_pagina > 12 ||

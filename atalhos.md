@@ -23,3 +23,15 @@ SELECT
   (SELECT COUNT(*) FROM public.boletim_secoes) AS secoes_importadas;
 
 -----------------------------
+
+###Commit completa
+
+cd ~/APURACAO
+
+git status
+
+git add .
+
+git commit -m "Atualiza configuração e estrutura do projeto"
+
+git push origin prod

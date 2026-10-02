@@ -11,6 +11,8 @@ class TelaoSelection(StrictModel):
     cargo: str = Field(max_length=100)
     numero: Code
     ativo: StrictBool = True
+    # Omitted preserves the photo; null removes it; a data URL replaces it.
+    foto: str | None = Field(default=None, max_length=2_800_000)
 
     @field_validator("cargo")
     @classmethod
@@ -44,6 +46,7 @@ class TelaoCandidate(StrictModel):
     nome: str
     ordem: int
     ativo: bool
+    foto_url: str | None
 
 
 class TelaoConfigResponse(StrictModel):
@@ -69,6 +72,7 @@ class DisplayCandidate(StrictModel):
     numero: str
     nome: str
     votos: int
+    foto_url: str | None
 
 
 class AvailableCandidate(StrictModel):
@@ -92,6 +96,8 @@ class DivulgacaoResponse(StrictModel):
     boletins_recebidos: int
     secoes_representadas: int
     total_secoes_esperadas: int | None
+    urnas_apuradas: int
+    total_urnas: int | None
     ultima_atualizacao: datetime
     ultima_importacao: datetime | None
     cards_por_pagina: int

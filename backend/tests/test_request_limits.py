@@ -124,6 +124,30 @@ def test_slow_body_releases_import_capacity(monkeypatch):
     asyncio.run(run())
 
 
+def test_screen_photo_configuration_has_its_own_bounded_body_budget(monkeypatch):
+    monkeypatch.setattr(get_settings(), "max_pdf_size_mb", 1)
+    app = BodyLimitMiddleware(success)
+
+    async def receive():
+        return {"type": "http.request", "body": b"a" * 3000000}
+
+    assert status(asyncio.run(exchange(app, path="/api/telao/config", receive=receive))) == 200
+
+    async def unread():
+        raise AssertionError("Oversized photos must be rejected before reading")
+
+    messages = asyncio.run(
+        exchange(
+            app,
+            path="/api/telao/config",
+            method="PUT",
+            receive=unread,
+            headers=[(b"content-length", b"20971521")],
+        )
+    )
+    assert status(messages) == 413
+
+
 @pytest.mark.parametrize("failure", ["disconnect", "exception", "cancel"])
 def test_interrupted_upload_always_releases_capacity(monkeypatch, failure):
     monkeypatch.setattr(get_settings(), "import_max_concurrent", 1)

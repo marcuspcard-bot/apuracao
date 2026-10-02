@@ -50,6 +50,8 @@ class BodyLimitMiddleware:
         limit = (
             limit * 2 + 8192 if scope["path"].rstrip("/").endswith("/confirmar") else limit + 65536
         )
+        if scope["path"].rstrip("/") == "/api/telao/config":
+            limit = 20 * 1024 * 1024
         length = Headers(scope=scope).get("content-length")
         if length is not None:
             try:

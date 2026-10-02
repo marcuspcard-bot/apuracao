@@ -44,6 +44,7 @@ def test_empty_screen_read_only_and_no_percentages(client, engine):
     assert data["candidatos"] == []
     assert data["boletins_recebidos"] == data["secoes_representadas"] == 0
     assert data["total_secoes_esperadas"] is None
+    assert data["urnas_apuradas"] == 0 and data["total_urnas"] is None
     assert data["zona"] == "0013" and data["municipio"] == "BACABAL"
     assert data["eleicao_data"] == "2026-10-04"
     assert not any("percent" in key for key in data)
@@ -80,7 +81,8 @@ def test_manual_selection_zero_votes_multiple_offices_and_no_rank(client, engine
     ]
     assert second["candidatos"][-1]["votos"] == 3003
     assert all(
-        set(c) == {"id", "ordem", "cargo", "numero", "nome", "votos"} for c in second["candidatos"]
+        set(c) == {"id", "ordem", "cargo", "numero", "nome", "votos", "foto_url"}
+        for c in second["candidatos"]
     )
 
 
@@ -120,6 +122,21 @@ def test_geographic_election_scope_and_coverage_never_multiply_votes(client, eng
     assert (
         screen(client)["total_secoes_esperadas"] == 4
     )  # The registry has one more section in zone 0066.
+
+
+def test_screen_counts_main_sections_without_aggregates_or_unregistered_sections(client, engine, pdf):
+    rows = ["zona;secao_principal;secoes_agregadas"]
+    for number in range(1, 254):
+        aggregate = str(1000 + number) if number <= 81 else ""
+        rows.append(f"0013;{number:04};{aggregate}")
+    assert confirm_list(client, preview_list(client, "\n".join(rows).encode())).status_code == 200
+    seed(engine, pdf, section="0001", aggregated=["1001"])
+    seed(engine, pdf, section="0002", aggregated=["1002"])
+    seed(engine, pdf, section="0900", aggregated=["0003"])
+    data = screen(client)
+    assert data["secoes_representadas"] == 6 and data["total_secoes_esperadas"] == 334
+    assert data["boletins_recebidos"] == 3
+    assert data["urnas_apuradas"] == 2 and data["total_urnas"] == 253
 
 
 def test_canonical_scope_numbers_and_search_do_not_duplicate_candidates(client, engine, pdf):

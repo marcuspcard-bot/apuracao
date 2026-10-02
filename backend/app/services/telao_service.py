@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import func, select, tuple_
@@ -9,6 +10,14 @@ from app.models import Boletim, CandidatoVoto, Resultado, TelaoCandidato, TelaoC
 from app.schemas.telao import TelaoSave
 from app.services.acompanhamento import ELEICAO_DATA, MUNICIPIO_CODIGO, TURNO
 from app.services.offices import RECOGNIZED_OFFICES
+from app.services.candidate_photos import (
+    discard_photos,
+    discard_uncommitted_photos,
+    photo_url,
+    prepare_photo,
+    store_photo,
+)
+from app.services.storage_service import StorageError
 
 ZONA = "0013"
 
@@ -58,6 +67,7 @@ def config_response(config: TelaoConfig | None):
                 "nome": c.nome_candidato,
                 "ordem": c.ordem,
                 "ativo": c.ativo,
+                "foto_url": photo_url(c),
             }
             for c in sorted(config.candidatos, key=lambda c: c.ordem)
         ]
@@ -98,7 +108,22 @@ def available_candidates(db: Session, cargo: str, query: str, offset: int, limit
     return {"candidatos": [dict(row) for row in rows[:limit]], "tem_mais": len(rows) > limit}
 
 
-def save_config(db: Session, body: TelaoSave):
+def save_config(db: Session, body: TelaoSave, storage):
+    uploaded, obsolete = [], []
+    try:
+        result = _save_config(db, body, storage, uploaded, obsolete)
+    except Exception as exc:
+        discard_uncommitted_photos(db, storage, uploaded)
+        if isinstance(exc, StorageError):
+            raise HTTPException(
+                502, "Não foi possível salvar a foto no Storage. Tente novamente."
+            ) from exc
+        raise
+    discard_photos(storage, obsolete)
+    return result
+
+
+def _save_config(db: Session, body: TelaoSave, storage, uploaded, obsolete):
     with db.begin():
         lock_keys(db, ["telao-config:1"])
         config = load_config(db)
@@ -150,13 +175,26 @@ def save_config(db: Session, body: TelaoSave):
             if entry is None:
                 source = sources[key]
                 entry = TelaoCandidato(
+                    id=uuid4(),
                     candidato_id=source.candidato_id,
                     cargo=item.cargo,
                     numero_candidato=item.numero,
                     nome_candidato=source.nome,
                 )
+            if "foto" in item.model_fields_set:
+                if entry.foto_path:
+                    obsolete.append((entry.foto_bucket, entry.foto_path))
+                if item.foto is None:
+                    entry.foto_bucket = entry.foto_path = None
+                else:
+                    store_photo(storage, entry, prepare_photo(item.foto), uploaded)
             entry.ordem, entry.ativo, entry.updated_at = order, item.ativo, now
             selected.append(entry)
+        obsolete.extend(
+            (entry.foto_bucket, entry.foto_path)
+            for key, entry in existing.items()
+            if key not in keys and entry.foto_path
+        )
         config.candidatos = selected
         db.flush()
         response = config_response(config)

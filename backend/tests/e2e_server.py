@@ -7,6 +7,7 @@ from pathlib import Path
 
 import uvicorn
 import pymupdf
+from PIL import Image
 from alembic import command
 from alembic.config import Config
 from fastapi import Response
@@ -41,8 +42,14 @@ engine = create_engine(
 class BrowserStorage:
     objects = {}
 
-    def upload(self, bucket, path, content):
+    def upload(self, bucket, path, content, content_type="application/pdf"):
         self.objects[bucket, path] = content
+
+    def ensure_photo_bucket(self, bucket):
+        assert bucket != "boletins"
+
+    def download(self, bucket, path):
+        return self.objects[bucket, path]
 
     def delete(self, bucket, path):
         self.objects.pop((bucket, path), None)
@@ -64,6 +71,8 @@ async def lifespan(app):
     root = Path(__file__).resolve().parents[2]
     artifacts = root / ".artifacts"
     artifacts.mkdir(exist_ok=True)
+    Image.new("RGB", (200, 300), "#549b7e").save(artifacts / "foto-candidato.png")
+    Image.new("RGB", (300, 200), "#527db5").save(artifacts / "foto-candidato-nova.png")
     source = extract_text_from_pdf((root / "Xangai_(ZZ)_-_0001_-_0483.pdf").read_bytes())
     for section, aggregated in [("0001", ["0002", "0003"]), ("0004", [])]:
         (artifacts / f"bacabal-sintetico-{section}.pdf").write_bytes(

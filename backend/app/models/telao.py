@@ -49,6 +49,8 @@ class TelaoCandidato(Base):
     cargo: Mapped[str] = mapped_column(String(100))
     numero_candidato: Mapped[str] = mapped_column(String(20))
     nome_candidato: Mapped[str] = mapped_column(String(200))
+    foto_bucket: Mapped[str | None] = mapped_column(String(100))
+    foto_path: Mapped[str | None] = mapped_column(String(500))
     ordem: Mapped[int]
     ativo: Mapped[bool]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

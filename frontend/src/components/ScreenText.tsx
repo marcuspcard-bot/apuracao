@@ -20,13 +20,25 @@ export function ScreenText({
     let active = true
     function fit() {
       if (!element || !active) return
+      const range = document.createRange()
+      range.selectNodeContents(element)
+      function overflows() {
+        if (!element) return false
+        const box = element.getBoundingClientRect()
+        // Right-aligned flex text can overflow to the left without increasing scrollWidth.
+        const ink = range.getBoundingClientRect()
+        return (
+          element.scrollWidth > element.clientWidth + 1 ||
+          element.scrollHeight > element.clientHeight + 1 ||
+          ink.left < box.left - 1 ||
+          ink.right > box.right + 1 ||
+          ink.top < box.top - 1 ||
+          ink.bottom > box.bottom + 1
+        )
+      }
       let size = maxSize
       element.style.fontSize = `${size}px`
-      while (
-        size > minSize &&
-        (element.scrollWidth > element.clientWidth + 1 ||
-          element.scrollHeight > element.clientHeight + 1)
-      ) {
+      while (size > minSize && overflows()) {
         size -= 1
         element.style.fontSize = `${size}px`
       }

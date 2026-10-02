@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "boletins"
+    supabase_candidate_bucket: str = "candidatos"
     frontend_url: str = "http://localhost:5173"
     max_pdf_size_mb: int = Field(default=10, ge=1, le=50)
     preview_secret_key: str
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
         if value == "*" or not value.startswith(("http://", "https://")):
             raise ValueError("FRONTEND_URL deve ser uma origem HTTP explicita.")
         return value.rstrip("/")
+
 
 @lru_cache
 def get_settings():

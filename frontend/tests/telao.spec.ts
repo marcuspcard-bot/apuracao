@@ -19,6 +19,8 @@ function disclosure(count = 5): Disclosure {
     boletins_recebidos: 87,
     secoes_representadas: 103,
     total_secoes_esperadas: 334,
+    urnas_apuradas: 118,
+    total_urnas: 253,
     ultima_atualizacao: '2026-10-04T21:43:12Z',
     ultima_importacao: '2026-10-04T21:43:10Z',
     cards_por_pagina: 6,
@@ -81,15 +83,46 @@ async function expectFitted(page: Page) {
         if (footer.bottom > innerHeight + 1)
           issues.push('footer outside viewport')
         document.querySelectorAll<HTMLElement>('.screen-fit').forEach((el) => {
+          const range = document.createRange()
+          range.selectNodeContents(el)
+          const ink = range.getBoundingClientRect()
+          const box = el.getBoundingClientRect()
           if (
             el.scrollWidth > el.clientWidth + 1 ||
-            el.scrollHeight > el.clientHeight + 1
+            el.scrollHeight > el.clientHeight + 1 ||
+            ink.left < box.left - 1 ||
+            ink.right > box.right + 1 ||
+            ink.top < box.top - 1 ||
+            ink.bottom > box.bottom + 1
           )
             issues.push(`text overflow: ${el.textContent}`)
         })
         document.querySelectorAll('.disclosure-candidate').forEach((el) => {
           if (el.getBoundingClientRect().bottom > footer.top + 1)
             issues.push('card overlaps footer')
+          const elements = [
+            '.candidate-portrait',
+            '.screen-candidate-details',
+            '.screen-candidate-votes',
+          ].map((selector) =>
+            el.querySelector(selector)!.getBoundingClientRect(),
+          )
+          const card = el.getBoundingClientRect()
+          if (
+            elements.some(
+              (box) =>
+                box.left < card.left ||
+                box.right > card.right ||
+                box.top < card.top ||
+                box.bottom > card.bottom,
+            )
+          )
+            issues.push('content outside card')
+          if (
+            elements[0].right > elements[1].left ||
+            elements[1].right > elements[2].left
+          )
+            issues.push('candidate fields overlap')
         })
         return issues
       }),
@@ -140,6 +173,14 @@ test('configuração sem login, ordem manual, SSE real e votos após confirmaç�
     page.locator('.screen-selection-list > li').nth(2),
   ).toContainText('DEPUTADO FEDERAL')
   await page.getByRole('button', { name: 'Remover 0123 do telão' }).click()
+  await page
+    .locator('.screen-selection-list > li')
+    .first()
+    .locator('input[type=file]')
+    .setInputFiles(path.resolve('../.artifacts/foto-candidato.png'))
+  await expect(
+    page.locator('.screen-selection-list img').first(),
+  ).toHaveAttribute('src', /^data:image\/png/)
   const save = page.getByRole('button', {
     name: 'Salvar configuração do telão',
   })
@@ -149,6 +190,9 @@ test('configuração sem login, ordem manual, SSE real e votos após confirmaç�
   ).toBeVisible()
   await page.reload()
   await expect(page.locator('.screen-selection-list > li')).toHaveCount(3)
+  await expect(
+    page.locator('.screen-selection-list img').first(),
+  ).toHaveAttribute('src', /\/api\/divulgacao\/candidatos\/.+\/foto\?v=/)
   const initialResponse = await request.get(
     'http://127.0.0.1:8001/api/divulgacao',
   )
@@ -169,7 +213,19 @@ test('configuração sem login, ordem manual, SSE real e votos após confirmaç�
       screen.locator('.vote-value .screen-text-value').nth(2),
     ).toHaveText('0')
     await expect(screen.locator('nav, input, .app-header')).toHaveCount(0)
-    await expect(screen.locator('body')).not.toContainText('%')
+    await expect(screen.locator('.disclosure-candidate')).not.toContainText([
+      '%',
+      '%',
+      '%',
+    ])
+    await expect
+      .poll(() =>
+        screen
+          .locator('.candidate-portrait img')
+          .first()
+          .evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(512)
     // Saving configuration emits a real SSE event, before the 10-second polling interval.
     await page.getByLabel('Exibir 22 - CANDIDATO SEM VOTOS').uncheck()
     await save.click()
@@ -211,6 +267,50 @@ test('configuração sem login, ordem manual, SSE real e votos após confirmaç�
         'GOVERNADOR',
         'PRESIDENTE',
       ])
+      const first = page.locator('.screen-selection-list > li').first()
+      const oldUrl = await first.locator('img').getAttribute('src')
+      await first.locator('input[type=file]').setInputFiles({
+        name: 'foto.svg',
+        mimeType: 'image/svg+xml',
+        buffer: Buffer.from('<svg />'),
+      })
+      await expect(page.getByRole('alert')).toContainText('JPG, PNG ou WebP')
+      await expect(first.locator('img')).toHaveAttribute('src', oldUrl!)
+      await first
+        .locator('input[type=file]')
+        .setInputFiles(path.resolve('../.artifacts/foto-candidato-nova.png'))
+      await expect(first.locator('img')).toHaveAttribute(
+        'src',
+        /^data:image\/png/,
+      )
+      await save.click()
+      await expect(
+        page.getByText('Configuração do telão salva com sucesso.'),
+      ).toBeVisible()
+      const newUrl = await first.locator('img').getAttribute('src')
+      expect(newUrl).not.toBe(oldUrl)
+      await screen.clock.runFor(1500)
+      await expect(
+        screen.locator('.candidate-portrait img').first(),
+      ).toHaveAttribute('src', newUrl!)
+      await expect
+        .poll(() =>
+          screen
+            .locator('.candidate-portrait img')
+            .first()
+            .evaluate((el) => (el as HTMLImageElement).naturalWidth),
+        )
+        .toBe(512)
+      await first.getByRole('button', { name: /^Remover foto de/ }).click()
+      await save.click()
+      await expect(
+        page.getByText('Configuração do telão salva com sucesso.'),
+      ).toBeVisible()
+      await screen.clock.runFor(1500)
+      await expect(screen.locator('.candidate-portrait img')).toHaveCount(0)
+      await expect(
+        screen.locator('.vote-value .screen-text-value').nth(1),
+      ).toHaveText((votes + 30).toLocaleString('pt-BR'))
     } finally {
       await importer.close()
     }
@@ -326,6 +426,8 @@ test('estados de erro inicial, sem candidatos, sem boletins e divulgação pausa
   const data = disclosure(0)
   data.boletins_recebidos = data.secoes_representadas = 0
   data.total_secoes_esperadas = null
+  data.urnas_apuradas = 0
+  data.total_urnas = null
   await page.route('**/api/divulgacao', (route) =>
     route.fulfill(fail ? { status: 503, json: {} } : { json: data }),
   )
@@ -343,9 +445,7 @@ test('estados de erro inicial, sem candidatos, sem boletins e divulgação pausa
   await expect(
     page.getByText('Aguardando recebimento dos boletins.'),
   ).toBeVisible()
-  await expect(
-    page.getByText('SEÇÕES REPRESENTADAS', { exact: true }),
-  ).toBeVisible()
+  await expect(page.getByText('Urnas apuradas', { exact: true })).toBeVisible()
   data.candidatos = disclosure(1).candidatos
   await changed(page)
   await page.clock.runFor(1000)
@@ -389,8 +489,8 @@ test('telão cabe em TV, 4K, notebook, tablet e celular com nomes e votos extens
             valueSize: parseFloat(getComputedStyle(value).fontSize),
             labelSize: parseFloat(getComputedStyle(label).fontSize),
             separated:
-              label.getBoundingClientRect().left >
-              value.getBoundingClientRect().right,
+              label.getBoundingClientRect().top >=
+              value.getBoundingClientRect().bottom - 1,
             label: label.textContent,
           }
         }),
@@ -405,9 +505,12 @@ test('telão cabe em TV, 4K, notebook, tablet e celular com nomes e votos extens
           .locator('.vote-value')
           .first()
           .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
-      ).toBeGreaterThanOrEqual(48)
+      ).toBeGreaterThanOrEqual(40)
     }
-    await expect(page.locator('body')).not.toContainText('%')
+    await expect(page.locator('.disclosure-grid')).not.toContainText('%')
+    await expect(page.locator('.screen-coverage-heading')).toContainText(
+      '118 de 253 · 46,6%',
+    )
     await expect(
       page.getByText('Consulte a Justiça Eleitoral para o resultado oficial.'),
     ).toBeVisible()
@@ -495,6 +598,14 @@ test('configuração responsiva preserva as alterações quando outro operador s
     route.fulfill({ json: { candidatos: [], tem_mais: false } }),
   )
   await page.goto('/configuracao-telao')
+  await page
+    .locator('.screen-selection-list > li')
+    .first()
+    .locator('input[type=file]')
+    .setInputFiles(path.resolve('../.artifacts/foto-candidato.png'))
+  await expect(
+    page.locator('.screen-selection-list img').first(),
+  ).toHaveAttribute('src', /^data:image\/png/)
   await page.getByLabel('Cards por página').fill('2')
   await page
     .getByRole('button', { name: 'Salvar configuração do telão' })
@@ -503,6 +614,9 @@ test('configuração responsiva preserva as alterações quando outro operador s
     'alterada por outra pessoa',
   )
   await expect(page.getByLabel('Cards por página')).toHaveValue('2')
+  await expect(
+    page.locator('.screen-selection-list img').first(),
+  ).toHaveAttribute('src', /^data:image\/png/)
   await expect(page.locator('.screen-selection-list > li')).toHaveCount(3)
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 })

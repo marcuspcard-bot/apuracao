@@ -18,7 +18,7 @@ test('páginas abrem diretamente e após recarga sem login ou tokens', async ({
     ['/importar', 'Importar Boletim de Urna'],
     ['/boletins', 'Boletins importados'],
     ['/configuracao-telao', 'Configuração do telão'],
-    ['/divulgacao', 'BACABAL - MA'],
+    ['/divulgacao', 'Eleições 2026 · Bacabal-MA'],
     ['/acompanhamento', 'Bacabal / MA'],
   ]) {
     await page.goto(url)

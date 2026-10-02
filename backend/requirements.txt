@@ -5,6 +5,7 @@ psycopg[binary]==3.3.3
 pydantic-settings==2.13.1
 alembic==1.18.4
 PyMuPDF==1.27.2
+Pillow==12.3.0
 python-multipart==0.0.22
 httpx==0.28.1
 cryptography==46.0.5

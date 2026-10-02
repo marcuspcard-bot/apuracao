@@ -9,6 +9,8 @@ export type ScreenSelection = AvailableCandidate & {
   id?: string
   ordem?: number
   ativo: boolean
+  foto_url?: string | null
+  foto?: string | null
 }
 
 export type ScreenConfig = {
@@ -30,7 +32,9 @@ export type ScreenConfig = {
 export type ScreenSave = Pick<
   ScreenConfig,
   'versao' | 'cards_por_pagina' | 'tempo_rotacao_segundos' | 'ativo'
-> & { candidatos: Pick<ScreenSelection, 'cargo' | 'numero' | 'ativo'>[] }
+> & {
+  candidatos: Pick<ScreenSelection, 'cargo' | 'numero' | 'ativo' | 'foto'>[]
+}
 
 export type PublicCandidate = {
   id: string
@@ -39,6 +43,7 @@ export type PublicCandidate = {
   nome: string
   ordem: number
   votos: number
+  foto_url?: string | null
 }
 
 export type Disclosure = {
@@ -50,6 +55,8 @@ export type Disclosure = {
   boletins_recebidos: number
   secoes_representadas: number
   total_secoes_esperadas: number | null
+  urnas_apuradas: number
+  total_urnas: number | null
   ultima_atualizacao: string
   ultima_importacao: string | null
   cards_por_pagina: number

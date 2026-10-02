@@ -3,14 +3,17 @@ from datetime import datetime, timezone
 from sqlalchemy import case, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.models import Boletim, BoletimSecao, CandidatoVoto, Resultado, SecaoEsperada
+from app.models import Boletim, BoletimSecao, CandidatoVoto, Resultado
 from app.services.acompanhamento import ELEICAO_DATA, MUNICIPIO_CODIGO, TURNO
 from app.services.telao_service import ZONA, bulletin_scope, config_response, load_config
+from app.services.secoes_esperadas import load_sections, section_status
 
 
 def _bulletins(db: Session):
     # Only confirmed imports exist here. Previews, errors and duplicates are not persisted.
-    return db.execute(select(Boletim.id, Boletim.created_at).where(*bulletin_scope())).all()
+    return db.execute(
+        select(Boletim.id, Boletim.created_at, Boletim.secao).where(*bulletin_scope())
+    ).all()
 
 
 def _totals(db: Session, bulletin_ids, candidates):
@@ -50,25 +53,33 @@ def divulgacao(db: Session):
     bulletins = _bulletins(db)
     ids = [b.id for b in bulletins]
     totals = _totals(db, ids, candidates)
-    # Coverage has its own query; it never joins candidate votes.
-    represented = (
-        db.scalar(
-            select(func.count(func.distinct(BoletimSecao.secao_chave))).where(
-                BoletimSecao.boletim_id.in_(ids)
-            )
-        )
+    # Reuse the overview rule: an aggregate cannot count as an extra ballot box.
+    principals = {b.id: b.secao for b in bulletins}
+    sections = (
+        [
+            {
+                "zona": row.zona,
+                "secao": row.numero_secao,
+                "tipo": row.tipo,
+                "boletim_id": row.boletim_id,
+                "secao_principal": principals[row.boletim_id],
+            }
+            for row in db.scalars(select(BoletimSecao).where(BoletimSecao.boletim_id.in_(ids)))
+        ]
         if ids
-        else 0
+        else []
     )
-    expected = db.scalar(
-        select(func.count())
-        .select_from(SecaoEsperada)
-        .where(
-            SecaoEsperada.municipio_codigo == str(int(MUNICIPIO_CODIGO)),
-            SecaoEsperada.zona_chave == str(int(ZONA)),
-            SecaoEsperada.eleicao_data == ELEICAO_DATA,
-            SecaoEsperada.eleicao_turno == TURNO,
-        )
+    coverage = section_status(
+        load_sections(
+            db,
+            {
+                "municipio_codigo": str(int(MUNICIPIO_CODIGO)),
+                "zona_chave": str(int(ZONA)),
+                "eleicao_data": ELEICAO_DATA,
+                "eleicao_turno": TURNO,
+            },
+        ),
+        sections,
     )
     return {
         "municipio": "BACABAL",
@@ -77,8 +88,10 @@ def divulgacao(db: Session):
         "eleicao_data": ELEICAO_DATA,
         "eleicao_turno": TURNO,
         "boletins_recebidos": len(ids),
-        "secoes_representadas": represented,
-        "total_secoes_esperadas": expected or None,
+        "secoes_representadas": len(sections),
+        "total_secoes_esperadas": coverage["secoes_esperadas"],
+        "urnas_apuradas": coverage["secoes_principais_apuradas"],
+        "total_urnas": coverage["secoes_principais_esperadas"],
         "ultima_atualizacao": datetime.now(timezone.utc),
         "ultima_importacao": max((b.created_at for b in bulletins), default=None),
         "cards_por_pagina": config["cards_por_pagina"],
@@ -86,7 +99,7 @@ def divulgacao(db: Session):
         "ativo": config["ativo"],
         "versao": config["versao"],
         "candidatos": [
-            {key: c[key] for key in ("id", "ordem", "cargo", "numero", "nome")}
+            {key: c[key] for key in ("id", "ordem", "cargo", "numero", "nome", "foto_url")}
             | {"votos": totals.get((c["cargo"], c["numero"]), 0)}
             for c in candidates
         ],

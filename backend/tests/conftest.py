@@ -62,11 +62,19 @@ class FakeStorage:
         self.objects = {}
         self.fail = False
 
-    def upload(self, bucket, path, content):
+    def upload(self, bucket, path, content, content_type="application/pdf"):
         if self.fail:
             raise StorageError("simulated")
         assert (bucket, path) not in self.objects
         self.objects[bucket, path] = content
+
+    def ensure_photo_bucket(self, bucket):
+        assert bucket != "boletins"
+
+    def download(self, bucket, path):
+        if self.fail or (bucket, path) not in self.objects:
+            raise StorageError("simulated")
+        return self.objects[bucket, path]
 
     def delete(self, bucket, path):
         self.objects.pop((bucket, path), None)

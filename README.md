@@ -110,6 +110,7 @@ O serviço de desenvolvimento é temporário e não instala inicialização auto
 | `SUPABASE_URL` | URL do projeto, como `https://SEU-PROJETO.supabase.co`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chave `service_role`, somente no backend. |
 | `SUPABASE_STORAGE_BUCKET` | `boletins`. |
+| `SUPABASE_CANDIDATE_BUCKET` | Bucket privado das fotos do telão, padrão `candidatos`; separado dos PDFs. |
 | `FRONTEND_URL` | Origem exata, sem caminho; por exemplo `https://seu-app.vercel.app`. Não aceita `*`. |
 | `MAX_PDF_SIZE_MB` | Limite por PDF, padrão `10`, máximo `50`. |
 | `PREVIEW_SECRET_KEY` | Chave Fernet gerada pelo comando acima, igual em todas as instâncias. |
@@ -367,9 +368,19 @@ Os testes de navegador usam o PostgreSQL local por padrão, nunca o `DATABASE_UR
 
 É possível adicionar candidatos de qualquer cargo reconhecido, inclusive vários senadores, mover para cima/baixo, ocultar ou remover apenas da exibição. **Salvar configuração do telão** persiste a lista e a ordem em uma única transação. **Visualizar telão** abre `/divulgacao` em outra aba. Cards por página (1 a 12) e rotação (5 a 300 segundos) são configuráveis; telas menores exibem menos cards por página para preservar a leitura. Os padrões são seis cards e dez segundos.
 
-`/divulgacao` não tem navegação administrativa. Exibe somente os candidatos selecionados e ativos, na ordem salva, incluindo candidatos com zero votos. Votos nunca alteram a seleção nem a ordem. A soma é feita no PostgreSQL, por cargo e número, com o mesmo tratamento de vagas de senador do acompanhamento. Cada BU entra uma única vez; cobertura de seções é consultada separadamente. Não há percentuais na resposta, na configuração ou na tela.
+`/divulgacao` não tem navegação administrativa. Exibe linhas com foto circular, cargo, nome, número e total de votos dos candidatos selecionados e ativos, na ordem salva, incluindo candidatos com zero votos. Votos nunca alteram a seleção nem a ordem. A soma é feita no PostgreSQL, por cargo e número, com o mesmo tratamento de vagas de senador do acompanhamento. Cada BU entra uma única vez; cobertura de seções é consultada separadamente. Não há percentuais nem barras de votação por candidato.
 
-**Boletins recebidos** conta documentos confirmados; **seções representadas** conta principais e agregadas distintas. Com o cadastro atual, o total esperado do telão é 334 seções; o resumo da Visão geral continua contando somente as 253 principais/isoladas. Esses indicadores têm propósitos diferentes. Sem cadastro, o total esperado é `null`, sem estimativa. Nenhum resultado pendente de confirmação, inconsistente ou duplicado entra na soma: essas situações não criam boletins persistidos no sistema atual.
+**Urnas apuradas** mostra a quantidade e o percentual de seções principais/isoladas, usando a mesma regra da Visão geral. No cadastro atual, são 253 principais; as 81 agregadas não aumentam esse total. Uma principal coberta apenas como agregada de outro BU não conta como sua própria urna. Sem cadastro, o total é `null` e não há percentual estimado. Os contadores antigos `boletins_recebidos`, `secoes_representadas` e `total_secoes_esperadas` continuam na API, além de `urnas_apuradas` e `total_urnas`. Nenhuma prévia, inconsistência ou duplicidade acrescenta votos.
+
+### Fotos dos Candidatos
+
+Na configuração, clique no retrato/ícone de câmera do candidato para escolher uma foto JPG, PNG ou WebP de até 2 MB. A prévia usa recorte central quadrado, como o retrato circular do telão. A foto é enviada somente ao clicar em **Salvar configuração do telão**; pode ser substituída ou removida pelo botão junto ao retrato. Sem foto, aparece um ícone neutro, nunca uma imagem fictícia de candidato.
+
+O backend valida conteúdo e dimensões (mínimo de 64 pixels em cada lado e máximo de 16 megapixels), rejeita animações e SVG, corrige a orientação e gera WebP 512x512 sem metadados. A migration `e52b7a91f603` adiciona somente `foto_bucket` e `foto_path` a `telao_candidatos`; execute `alembic upgrade head` antes de iniciar a API atualizada. Não altera votos, boletins ou a configuração existente.
+
+As fotos ficam no bucket privado `candidatos`, criado pela API no primeiro salvamento com foto se ainda não existir. A chave do backend deve poder criar o bucket; alternativamente crie-o privado no Supabase, permitindo `image/webp`. `SUPABASE_CANDIDATE_BUCKET` permite outro nome, nunca igual ao bucket de PDFs. As fotos são servidas por `/api/divulgacao/candidatos/{id}/foto?v={revisao}`, com cache de uma hora e sem expor credenciais. Como o sistema não tem login, quem alcançar essa rota pode ver a foto.
+
+Reordenar ou ocultar preserva a foto. Omitir `foto` no salvamento mantém a imagem atual; `null` remove; uma data URL válida substitui. O controle de versão também protege fotos contra alterações concorrentes. A imagem anterior é removida do Storage somente após o commit. Em falha de commit, o backend verifica se a nova imagem tem referência antes de tentar removê-la; uma indisponibilidade pode deixar um arquivo órfão, sem apagar a imagem confirmada. Excluir BUs não remove as fotos selecionadas. O corpo completo da configuração tem limite de 20 MB; em lotes grandes, salve as fotos em etapas.
 
 ### Banco e Concorrência
 
@@ -384,6 +395,7 @@ Um lock transacional e o campo `versao` evitam sobrescrita silenciosa por operad
 | `GET` | `/api/telao/candidatos-disponiveis?cargo=SENADOR&q=123&offset=0&limit=20` | Busca paginada por cargo, número ou nome; sem login. |
 | `GET` | `/api/divulgacao` | Somente leitura; candidatos selecionados, votos e contadores. |
 | `GET` | `/api/divulgacao/eventos` | SSE; transmite apenas notificações de mudança, nunca registros eleitorais ou credenciais. |
+| `GET` | `/api/divulgacao/candidatos/{id}/foto?v={revisao}` | Foto normalizada do candidato selecionado; sem login. |
 
 ### Acesso sem login
 
@@ -408,3 +420,5 @@ Referências oficiais: [Postgres Changes no Supabase Realtime](https://supabase.
 `backend/tests/test_telao.py` cobre escopo municipal/zona/data/turno, seleção manual e zero votos, múltiplos cargos e senadores, ordenação, remoção sem excluir votos, concorrência, RLS, acesso sem login, prévia/confirmação, duplicidades, inconsistências, cobertura sem multiplicar votos e invalidação Realtime. Os testes existentes de migration também verificam os novos modelos contra o Alembic.
 
 `frontend/tests/telao.spec.ts` cobre configuração sem login, busca e ordem, SSE real de configuração, importação confirmada atualizando o telão, debounce, polling, falha temporária sem zerar votos, estados vazios, rotação, Fullscreen API e layouts 1920x1080, 1366x768, 3840x2160, tablet e celular. PDFs e respostas sintéticas desses testes não são inseridos no Supabase.
+
+`backend/tests/test_candidate_photos.py` e `test_photo_migration.py` verificam validação, normalização, isolamento de cargo/candidato, substituição, remoção, falhas, preservação da seleção e migração de dados antigos. Os testes de Storage cobrem bucket privado e códigos de erro do Supabase. Os testes de navegador também cobrem prévia, persistência, troca e remoção da foto e detectam a área efetiva dos textos, inclusive números alinhados à direita.

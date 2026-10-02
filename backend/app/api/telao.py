@@ -1,11 +1,14 @@
 import asyncio
 import json
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models import TelaoCandidato
+from app.services.storage_service import StorageService, StorageError, get_storage
 from app.schemas.telao import (
     AvailableCandidates,
     DivulgacaoResponse,
@@ -34,9 +37,13 @@ def get_config(response: Response, db: Session = Depends(get_db)):
 @admin_router.put("/config", response_model=TelaoConfigResponse)
 @admin_router.post("/config", response_model=TelaoConfigResponse)
 def update_config(
-    body: TelaoSave, request: Request, response: Response, db: Session = Depends(get_db)
+    body: TelaoSave,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage),
 ):
-    result = save_config(db, body)
+    result = save_config(db, body, storage)
     request.app.state.screen_events.notify()
     response.headers["Cache-Control"] = "no-store"
     return result
@@ -92,3 +99,33 @@ async def events(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@public_router.get("/candidatos/{candidate_id}/foto")
+def candidate_photo(
+    candidate_id: UUID,
+    request: Request,
+    v: str = Query(max_length=32),
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage),
+):
+    candidate = db.get(TelaoCandidato, candidate_id)
+    if not candidate or not candidate.foto_path:
+        raise HTTPException(404, "Foto não encontrada.")
+    bucket, path = candidate.foto_bucket, candidate.foto_path
+    revision = path.rsplit("/", 1)[-1].removesuffix(".webp")
+    if v != revision:
+        raise HTTPException(404, "Foto não encontrada.")
+    db.rollback()
+    headers = {
+        "ETag": f'"{revision}"',
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if request.headers.get("if-none-match") == headers["ETag"]:
+        return Response(status_code=304, headers=headers)
+    try:
+        content = storage.download(bucket, path)
+    except StorageError as exc:
+        raise HTTPException(502, "Não foi possível carregar a foto.") from exc
+    return Response(content, media_type="image/webp", headers=headers)
