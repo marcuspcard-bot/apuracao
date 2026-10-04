@@ -26,7 +26,7 @@ TABLE_HEADER = re.compile(
     r"^(?:NOME DO CANDIDATO(?: NUM(?:ERO)?\.? CAND(?:IDATO)?\.? VOTOS)?|NUM(?:ERO)?\.? CAND(?:IDATO)?\.?(?: VOTOS)?|VOTOS)$"
 )
 PAGE_NOISE = re.compile(
-    r"^(?:\(VIA DIGITAL\)|JUSTICA ELEITORAL|TRIBUNAL REGIONAL ELEITORAL.*|BOLETIM DE URNA|ELEICOES .+|[12][º°]? TURNO|\(\d{2}/\d{2}/\d{4}\)|CODIGO VERIFICADOR:.*|PAGINA \d+(?: (?:DE|/) \d+)?|\d+\s*/\s*\d+)$"
+    r"^(?:\(VIA DIGITAL\)|JUSTICA ELEITORAL|TRIBUNAL REGIONAL ELEITORAL.*|BOLETIM DE URNA|ELEICOES .+|ELEICAO .+|[12][º°]? TURNO|\(\d{2}/\d{2}/\d{4}\)|CODIGO VERIFICADOR:.*|PAGINA \d+(?: (?:DE|/) \d+)?|\d+\s*/\s*\d+)$"
 )
 FOOTER_START = re.compile(r"^\s*(?:ASSINATURA QR CODE|CODIGO DE IDENTIFICACAO DA CARGA)\b")
 
@@ -135,7 +135,7 @@ def parse_candidates(text: str, office_name: str) -> list[dict]:
 
 
 def parse_vote_rows(text: str, office_name: str, kind: str) -> list[dict]:
-    pattern = r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿªº\s.'’()/-]*?)\s+(\d{1,20})\s+(\d+)(?=\s|$)"
+    pattern = r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿªº\s.'’()/+−-]*?)\s+(\d{1,20})\s+(\d+)(?=\s|$)"
     rows = re.findall(pattern, text)
     if re.sub(pattern, "", text).strip():
         raise ValueError(f"Falha no parser: linhas de {kind} não reconhecidas em {office_name}.")
@@ -192,7 +192,12 @@ def parse_office_totals(text: str, office_name: str) -> tuple[dict, list[str]]:
     boundary = TOTAL_START.search(source)
     if boundary:
         tail = source[boundary.start() :]
-        for label in [*TOTAL_LABELS.values(), r"ELEITORES\s+APTOS"]:
+        for label in [
+            *TOTAL_LABELS.values(),
+            r"ELEITORES\s+APTOS",
+            r"ORIGINAIS DA SECAO",
+            r"TEMPORARIOS NA SECAO",
+        ]:
             tail = re.sub(rf"(?m)^\s*{label}\s*:?\s*\d+[ \t]*(?=\n|$)", "", tail)
         if tail.strip():
             problems.append(
@@ -201,10 +206,57 @@ def parse_office_totals(text: str, office_name: str) -> tuple[dict, list[str]]:
     return values, problems
 
 
+def extract_party_blocks(text: str, office_name: str) -> tuple[str, list[str], int | None]:
+    """Separate party subtotals from the office's authoritative totals."""
+    heading = re.compile(r"(?m)^[ \t]*PARTIDO\s*:\s*(\d+)\s*-\s*[^\n]+$", re.IGNORECASE)
+    matches = list(heading.finditer(normalized(text)))
+    if not matches:
+        return text, [], None
+    remaining = [text[: matches[0].start()]]
+    problems, numbers = [], []
+    legend_sum = 0
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.end() : end]
+        boundary = re.search(r"(?m)^\s*ELEITORES\s+APTOS\b", normalized(body))
+        tail = body[boundary.start() :] if boundary else ""
+        body = body[: boundary.start()] if boundary else body
+        source = normalized(body)
+        label = TOTAL_LABELS["votos_legenda"]
+        legend = re.findall(rf"(?m)^\s*{label}\s*:?\s*(\d+)[ \t]*(?=\n|$)", source)
+        total = re.findall(r"(?m)^\s*TOTAL DO PARTIDO\s*:?\s*(\d+)[ \t]*(?=\n|$)", source)
+        if len(legend) != 1 or len(total) != 1:
+            raise ValueError(
+                f"Falha no parser: subtotais do partido {match[1]} inválidos em {office_name}."
+            )
+        rows = re.sub(rf"(?m)^\s*{label}\s*:?\s*\d+[ \t]*(?=\n|$)", "", body, flags=re.IGNORECASE)
+        rows = re.sub(r"(?mi)^\s*Total do partido\s*:?\s*\d+[ \t]*(?=\n|$)", "", rows)
+        rows = "\n".join(
+            line
+            for line in rows.splitlines()
+            if normalized(line).strip() != "NAO HA VOTOS NOMINAIS"
+        )
+        candidates = parse_vote_rows(rows, office_name, "candidatos")
+        if sum(c["votos"] for c in candidates) + int(legend[0]) != int(total[0]):
+            problems.append(
+                f"{office_name}: total do partido {match[1]} difere de nominais + legenda."
+            )
+        numbers.append(str(int(match[1])))
+        legend_sum += int(legend[0])
+        remaining.extend([rows, tail])
+    if len(numbers) != len(set(numbers)):
+        problems.append(f"{office_name}: há números de partido repetidos.")
+    return "\n".join(remaining), problems, legend_sum
+
+
 def parse_result(text: str, name: str) -> dict:
     clean = clean_office_text(text)
+    clean, party_problems, party_legend = extract_party_blocks(clean, name)
     clean, parties = extract_legend_tables(clean, name)
     values, problems = parse_office_totals(clean, name)
+    problems.extend(party_problems)
+    if party_legend is not None and values["votos_legenda"] != party_legend:
+        problems.append(f"{name}: soma dos votos dos partidos difere dos votos de legenda.")
     if parties:
         label = TOTAL_LABELS["votos_legenda"]
         if not re.search(rf"(?m)^\s*{label}\b", normalized(clean)):

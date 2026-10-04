@@ -1,5 +1,7 @@
-testar localmente:
-docker start apuracao-api
+testar localmente (atualizar o backend antes de iniciar):
+cd /home/marcus/APURACAO
+docker cp backend/app/. apuracao-api:/app/app/
+docker restart apuracao-api
 cd /home/marcus/APURACAO/frontend
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 

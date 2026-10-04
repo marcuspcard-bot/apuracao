@@ -14,6 +14,7 @@ import { DetalhesBoletim } from './pages/DetalhesBoletim'
 import { AbrirPdf } from './pages/AbrirPdf'
 import { Acompanhamento } from './pages/Acompanhamento'
 import { ConfiguracaoTelao } from './pages/ConfiguracaoTelao'
+import { Relatorios } from './pages/Relatorios'
 import { Divulgacao } from './pages/Divulgacao'
 
 export default function App() {
@@ -57,6 +58,10 @@ export default function App() {
               <FileStack size={17} />
               Boletins
             </NavLink>
+            <NavLink to="/relatorios">
+              <FileStack size={17} />
+              Relatórios
+            </NavLink>
             <NavLink to="/configuracao-telao">
               <Monitor size={17} />
               Telão
@@ -68,6 +73,7 @@ export default function App() {
       <main id="main">
         <Routes>
           <Route path="/" element={<Importar />} />
+          <Route path="/relatorios" element={<Relatorios />} />
           <Route path="/acompanhamento" element={<Acompanhamento />} />
           <Route path="/configuracao-telao" element={<ConfiguracaoTelao />} />
           <Route path="/digitar" element={<DigitarBoletim />} />
