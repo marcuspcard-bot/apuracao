@@ -7,6 +7,7 @@ import {
   Monitor,
 } from 'lucide-react'
 import { useEffect } from 'react'
+import { DigitarBoletim } from './pages/DigitarBoletim'
 import { Importar } from './pages/Importar'
 import { Boletins } from './pages/Boletins'
 import { DetalhesBoletim } from './pages/DetalhesBoletim'
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/" element={<Importar />} />
           <Route path="/acompanhamento" element={<Acompanhamento />} />
           <Route path="/configuracao-telao" element={<ConfiguracaoTelao />} />
+          <Route path="/digitar" element={<DigitarBoletim />} />
           <Route path="/importar" element={<Importar />} />
           <Route path="/boletins" element={<Boletins />} />
           <Route path="/boletins/:id" element={<DetalhesBoletim />} />

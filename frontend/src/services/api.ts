@@ -21,21 +21,27 @@ api.interceptors.request.use((config) => {
 export async function sendPdf(
   file: File,
   signal: AbortSignal,
+  substituirId?: string,
 ): Promise<Preview> {
   const form = new FormData()
   form.append('file', file)
   return (
-    await api.post('/api/boletins/preview', form, { signal, timeout: 180000 })
+    await api.post('/api/boletins/preview', form, {
+      signal,
+      timeout: 180000,
+      params: { substituir_id: substituirId },
+    })
   ).data
 }
 
 export async function confirmBoletim(
   token: string,
+  substituirId?: string,
 ): Promise<{ id: string; detail: string }> {
   return (
     await api.post(
       '/api/boletins/confirmar',
-      { preview_token: token },
+      { preview_token: token, substituir_id: substituirId },
       { timeout: 240000 },
     )
   ).data
@@ -132,7 +138,9 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Ocorreu um erro inesperado.'
 }
 
-export const formatDate = (value: string) =>
-  new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR')
+export const formatDate = (value: string | null) =>
+  value === null
+    ? 'Não informado'
+    : new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR')
 export const formatNumber = (value: number | null) =>
   value === null ? 'Não identificado' : value.toLocaleString('pt-BR')

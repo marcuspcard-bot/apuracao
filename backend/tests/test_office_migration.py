@@ -2,8 +2,7 @@ from uuid import uuid4
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, text, Table, MetaData
 
 from app.core import database
 from app.services.boletim_service import make_boletim
@@ -23,10 +22,34 @@ def test_upgrade_preserves_old_rows_and_defaults_legend(engine, pdf, monkeypatch
         data = parse_bu_text(extract_text_from_pdf(pdf))
         boletim = make_boletim(data, "existing.pdf", "e" * 64, "boletins", "existing.pdf")
         boletim.resultados = []
-        with Session(isolated) as db, db.begin():
-            db.add(boletim)
-            db.flush()
-            boletim_id = boletim.id
+        # Insert using the historical schema, not today's ORM columns.
+        boletim_id = uuid4()
+        metadata = MetaData()
+        old_boletins = Table("boletins", metadata, autoload_with=isolated)
+        old_sections = Table("boletim_secoes", metadata, autoload_with=isolated)
+        with isolated.begin() as conn:
+            conn.execute(
+                old_boletins.insert().values(
+                    id=boletim_id,
+                    **{
+                        c.name: getattr(boletim, c.name)
+                        for c in old_boletins.columns
+                        if c.name not in ("id", "created_at")
+                    },
+                )
+            )
+            for section in boletim.secoes:
+                conn.execute(
+                    old_sections.insert().values(
+                        id=uuid4(),
+                        boletim_id=boletim_id,
+                        **{
+                            c.name: getattr(section, c.name)
+                            for c in old_sections.columns
+                            if c.name not in ("id", "boletim_id")
+                        },
+                    )
+                )
         result_id, candidate_id = uuid4(), uuid4()
         with isolated.begin() as conn:
             conn.execute(
@@ -53,9 +76,19 @@ def test_upgrade_preserves_old_rows_and_defaults_legend(engine, pdf, monkeypatch
                 text("SELECT id, numero_candidato, votos, vaga FROM votos_candidatos")
             ).one() == (candidate_id, "12", 16, "")
             assert conn.scalar(text("SELECT count(*) FROM boletins")) == 1
+            assert conn.execute(
+                text("SELECT origem, historico_manual, evidencia_path FROM boletins")
+            ).one() == ("PDF", [], None)
             assert conn.scalar(text("SELECT count(*) FROM boletim_secoes")) == 5
             assert conn.scalar(text("SELECT count(*) FROM secoes_esperadas")) == 0
-            assert conn.scalar(text("SELECT relrowsecurity FROM pg_class WHERE oid = 'secoes_esperadas'::regclass")) is True
+            assert (
+                conn.scalar(
+                    text(
+                        "SELECT relrowsecurity FROM pg_class WHERE oid = 'secoes_esperadas'::regclass"
+                    )
+                )
+                is True
+            )
         command.check(config)
     finally:
         isolated.dispose()

@@ -106,7 +106,8 @@ def section_status(rows: list[SecaoEsperada], imported: list[dict]):
         found = coverage.get((int(expected.zona_chave), int(expected.secao_chave)))
         item = {
             "numero": expected.numero_secao,
-            "apurada": found is not None,
+            "apurada": found is not None and not found.get("parcial", False),
+            "parcial": bool(found and found.get("parcial", False)),
             "boletim_id": found["boletim_id"] if found else None,
             "secao_principal_bu": found["secao_principal"] if found else None,
             "vinculo_divergente": bool(
@@ -125,7 +126,7 @@ def section_status(rows: list[SecaoEsperada], imported: list[dict]):
             "APURADA"
             if all(s["apurada"] for s in members)
             else "PARCIAL"
-            if any(s["apurada"] for s in members)
+            if any(s["apurada"] or s["parcial"] for s in members)
             else "PENDENTE"
         )
         result.append(group)
@@ -134,7 +135,7 @@ def section_status(rows: list[SecaoEsperada], imported: list[dict]):
     principals_counted = (
         sum(g["principal"]["apurada"] and not g["principal"]["vinculo_divergente"] for g in result)
         if rows
-        else sum(s["tipo"] == "PRINCIPAL" for s in imported)
+        else sum(s["tipo"] == "PRINCIPAL" and not s.get("parcial", False) for s in imported)
     )
     return {
         "lista_secoes_importada": bool(rows),

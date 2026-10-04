@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { BatchImport } from '../components/BatchImport'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Check,
   CheckCircle2,
@@ -15,6 +17,9 @@ import { BoletimPreview } from '../components/BoletimPreview'
 import { useImportacao } from '../hooks/useImportacao'
 
 export function Importar() {
+  const [batch, setBatch] = useState<File[]>([])
+  const [params] = useSearchParams()
+  const substituirId = params.get('substituir') || undefined
   const {
     preview,
     loading,
@@ -27,17 +32,40 @@ export function Importar() {
     reset,
     upload,
     save,
-  } = useImportacao()
+  } = useImportacao(substituirId)
+  if (batch.length)
+    return <BatchImport files={batch} onReset={() => setBatch([])} />
   return (
     <>
       <div className="page-heading">
         <div>
           <span className="eyebrow">IMPORTAÇÃO</span>
-          <h1>Importar Boletim de Urna</h1>
-          <p>Envie o PDF gerado pelo aplicativo Boletim na Mão.</p>
+          <h1>
+            {substituirId
+              ? 'Substituir seção manual pelo PDF'
+              : 'Importar Boletim de Urna'}
+          </h1>
+          <p>Envie até 10 PDFs gerados pelo aplicativo Boletim na Mão.</p>
         </div>
         <span className="edition">BU / 01</span>
       </div>
+      {!substituirId && (
+        <div className="notice">
+          <span>
+            Não conseguiu ler o QR Code?{' '}
+            <Link to="/digitar">
+              Digitar candidatos específicos e anexar fotos do BU
+            </Link>
+          </span>
+        </div>
+      )}
+      {substituirId && !saved && (
+        <div className="notice">
+          O PDF deve representar a mesma seção e suas agregadas. Após a
+          confirmação, os votos do PDF substituem os manuais, sem somar os dois
+          lançamentos.
+        </div>
+      )}
       <ol className="steps" aria-label="Etapas da importação">
         {['Enviar PDF', 'Conferir dados', 'Salvar boletim'].map((step, i) => (
           <li
@@ -82,7 +110,13 @@ export function Importar() {
               <h2>Arquivo do boletim</h2>
               <span className="muted">01</span>
             </div>
-            <PdfUpload onFile={upload} />
+            <PdfUpload
+              maxFiles={substituirId ? 1 : 10}
+              onFiles={(files) => {
+                if (files.length === 1) void upload(files[0])
+                else setBatch(files)
+              }}
+            />
           </div>
           <aside className="reference">
             <img
@@ -148,6 +182,62 @@ export function Importar() {
               </div>
             </div>
           )}
+          {preview.substituicao && (
+            <section className="document-section">
+              <h2>Conferir votos antes da substituição</h2>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cargo / candidato</th>
+                      <th>Digitado</th>
+                      <th>No PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.substituicao.dados.cargos.flatMap((c) =>
+                      c.candidatos.map((v) => {
+                        const office = preview.dados.cargos.find(
+                          (n) => n.nome === c.nome,
+                        )
+                        const overall = office?.candidatos.find(
+                          (n) =>
+                            n.numero.replace(/^0+(?=\d)/, '') ===
+                            v.numero.replace(/^0+(?=\d)/, ''),
+                        )
+                        const seats =
+                          office?.vagas.flatMap((s) =>
+                            s.candidatos.filter(
+                              (n) =>
+                                n.numero.replace(/^0+(?=\d)/, '') ===
+                                v.numero.replace(/^0+(?=\d)/, ''),
+                            ),
+                          ) || []
+                        const votes =
+                          overall?.votos ??
+                          (seats.length
+                            ? seats.reduce((sum, n) => sum + n.votos, 0)
+                            : null)
+                        return (
+                          <tr key={`${c.nome}:${v.numero}`}>
+                            <td>
+                              {c.nome} · {v.numero} — {v.nome}
+                            </td>
+                            <td>{v.votos}</td>
+                            <td>{votes ?? 'Não identificado'}</td>
+                          </tr>
+                        )
+                      }),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                O lançamento manual ficará apenas no histórico. Os demais
+                candidatos do PDF também serão importados.
+              </p>
+            </section>
+          )}
           <BoletimPreview dados={preview.dados} />
           <div className="save-bar">
             <span className="muted">
@@ -180,7 +270,11 @@ export function Importar() {
                 ) : (
                   <Save size={17} />
                 )}
-                {saving ? 'Salvando...' : 'Salvar boletim'}
+                {saving
+                  ? 'Salvando...'
+                  : substituirId
+                    ? 'Confirmar substituição pelo PDF'
+                    : 'Salvar boletim'}
               </button>
             </div>
           </div>

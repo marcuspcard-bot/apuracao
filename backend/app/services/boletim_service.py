@@ -68,6 +68,9 @@ def make_boletim(
 def detail(b: Boletim):
     response = {
         "id": b.id,
+        "origem": b.origem,
+        "historico_manual": b.historico_manual,
+        "tem_foto": bool(b.evidencia_path),
         "created_at": b.created_at,
         "arquivo_nome_original": b.arquivo_nome_original,
         "arquivo_hash": b.arquivo_hash,

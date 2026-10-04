@@ -300,7 +300,8 @@ export function ConfiguracaoTelao() {
                   const selected = config.candidatos.some(
                     (c) =>
                       c.cargo === candidate.cargo &&
-                      c.numero === candidate.numero,
+                      c.numero.replace(/^0+(?=\d)/, '') ===
+                        candidate.numero.replace(/^0+(?=\d)/, ''),
                   )
                   return (
                     <li key={`${candidate.cargo}:${candidate.numero}`}>

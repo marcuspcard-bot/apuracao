@@ -40,6 +40,9 @@ export function Boletins() {
           <h1>Boletins importados</h1>
           <p>Registros de Boletins de Urna.</p>
         </div>
+        <Link className="button" to="/digitar">
+          Digitar votos / fotos
+        </Link>
         <Link className="button primary" to="/importar">
           <Plus size={17} />
           Importar PDF
@@ -84,6 +87,7 @@ export function Boletins() {
                 <th>Zona</th>
                 <th>Seção</th>
                 <th>Agregadas</th>
+                <th>Origem</th>
                 <th>Comparecimento</th>
                 <th>Data de importação</th>
                 <th>Ações</th>
@@ -99,6 +103,7 @@ export function Boletins() {
                   <td className="code">{b.zona}</td>
                   <td className="code">{b.secao}</td>
                   <td>{b.quantidade_secoes_agregadas}</td>
+                  <td>{b.origem === 'MANUAL' ? 'Manual — parcial' : 'PDF'}</td>
                   <td>{formatNumber(b.comparecimento)}</td>
                   <td>{new Date(b.created_at).toLocaleDateString('pt-BR')}</td>
                   <td>

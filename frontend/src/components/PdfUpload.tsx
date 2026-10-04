@@ -1,7 +1,13 @@
 import { useRef, useState } from 'react'
 import { FileUp, Upload } from 'lucide-react'
 
-export function PdfUpload({ onFile }: { onFile: (file: File) => void }) {
+export function PdfUpload({
+  onFiles,
+  maxFiles = 10,
+}: {
+  onFiles: (files: File[]) => void
+  maxFiles?: number
+}) {
   const input = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
@@ -9,16 +15,21 @@ export function PdfUpload({ onFile }: { onFile: (file: File) => void }) {
   function select(files: FileList | null) {
     setError('')
     if (!files?.length) return
-    if (files.length !== 1)
-      return setError('Selecione apenas um PDF por importação.')
-    const file = files[0]
+    if (files.length > maxFiles)
+      return setError(
+        `Selecione até ${maxFiles} PDF${maxFiles === 1 ? '' : 's'} por importação.`,
+      )
+    const selected = Array.from(files)
     if (
-      !file.name.toLowerCase().endsWith('.pdf') ||
-      file.type !== 'application/pdf'
+      selected.some(
+        (file) =>
+          !file.name.toLowerCase().endsWith('.pdf') ||
+          file.type !== 'application/pdf',
+      )
     ) {
       return setError('Selecione um arquivo PDF válido.')
     }
-    onFile(file)
+    onFiles(selected)
   }
 
   return (
@@ -40,11 +51,18 @@ export function PdfUpload({ onFile }: { onFile: (file: File) => void }) {
         }}
       >
         <FileUp className="upload-icon" size={44} strokeWidth={1.5} />
-        <h2>Arraste seu PDF até aqui</h2>
-        <span className="muted">ou selecione o arquivo no seu dispositivo</span>
+        <h2>
+          {maxFiles === 1
+            ? 'Arraste seu PDF até aqui'
+            : 'Arraste até 10 PDFs até aqui'}
+        </h2>
+        <span className="muted">
+          ou selecione os arquivos no seu dispositivo
+        </span>
         <input
           ref={input}
           type="file"
+          multiple={maxFiles > 1}
           accept="application/pdf,.pdf"
           aria-label="Arquivo PDF"
           hidden

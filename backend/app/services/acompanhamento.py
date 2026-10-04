@@ -4,6 +4,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Boletim, BoletimSecao, CandidatoVoto, Resultado
+from app.services.candidate_identity import candidate_key, candidate_key_sql
 from app.services.secoes_esperadas import load_sections, section_status
 
 # TSE: mun-e000619-cm.json (municipality identity), CDE 2026 (election date).
@@ -31,9 +32,9 @@ def _load_bulletins(
     zone: str | None = None,
     section: str | None = None,
 ):
-    statement = select(Boletim.id, Boletim.zona, Boletim.secao, Boletim.created_at).where(
-        *_scope_filters(), Boletim.eleicao_data == election_date
-    )
+    statement = select(
+        Boletim.id, Boletim.zona, Boletim.secao, Boletim.created_at, Boletim.origem
+    ).where(*_scope_filters(), Boletim.eleicao_data == election_date)
     if zone is not None and section is not None:
         statement = statement.where(
             Boletim.id.in_(
@@ -76,6 +77,7 @@ def _load_covered_sections(db: Session, bulletins):
                 "tipo": s.tipo,
                 "secao_principal": bulletins[s.boletim_id].secao,
                 "boletim_id": str(s.boletim_id),
+                "parcial": bulletins[s.boletim_id].origem == "MANUAL",
             }
             for s in rows
         ],
@@ -100,7 +102,12 @@ def _summarize_candidates(db: Session, bulletin_ids):
             CandidatoVoto.vaga,
             CandidatoVoto.votos,
             func.max(case((CandidatoVoto.vaga == "", 1), else_=0))
-            .over(partition_by=(CandidatoVoto.resultado_id, CandidatoVoto.numero_candidato))
+            .over(
+                partition_by=(
+                    CandidatoVoto.resultado_id,
+                    candidate_key_sql(CandidatoVoto.numero_candidato),
+                )
+            )
             .label("has_overall"),
         )
         .join(Resultado, Resultado.id == CandidatoVoto.resultado_id)
@@ -123,7 +130,7 @@ def _summarize_candidates(db: Session, bulletin_ids):
     )
     for row in totals:
         entry = offices[row.cargo]["candidatos"].setdefault(
-            row.numero,
+            candidate_key(row.numero),
             {
                 "numero": row.numero,
                 "nomes": set(),
@@ -131,6 +138,7 @@ def _summarize_candidates(db: Session, bulletin_ids):
                 "vagas": {},
             },
         )
+        entry["numero"] = min(entry["numero"], row.numero)
         entry["nomes"].add(row.nome)
         entry["votos"] += row.votos
         entry["vagas"][row.vaga] = entry["vagas"].get(row.vaga, 0) + row.votos_vaga
@@ -162,9 +170,7 @@ def _summarize_candidates(db: Session, bulletin_ids):
 
 
 def section_votes(db: Session, zone: str, section: str, election_date: date = ELEICAO_DATA):
-    bulletins = {
-        b.id: b for b in _load_bulletins(db, election_date, zone=zone, section=section)
-    }
+    bulletins = {b.id: b for b in _load_bulletins(db, election_date, zone=zone, section=section)}
     return {
         "boletins": len(bulletins),
         "secoes": _load_covered_sections(db, bulletins),
@@ -185,7 +191,8 @@ def overview(db: Session, election_date: date = ELEICAO_DATA):
         "consultado_em": datetime.now(timezone.utc),
         "ultima_importacao": max((b.created_at for b in bulletins.values()), default=None),
         "boletins": len(bulletins),
-        "secoes_apuradas": len(sections),
+        "secoes_apuradas": sum(not s["parcial"] for s in sections),
+        "boletins_manuais": sum(b.origem == "MANUAL" for b in bulletins.values()),
         **section_status(
             load_sections(db, {**SECTION_SCOPE, "eleicao_data": election_date}), sections
         ),

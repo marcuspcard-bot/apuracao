@@ -8,6 +8,8 @@ import type {
   SectionSelection,
 } from '../types/acompanhamento'
 
+const candidateKey = (number: string) => number.replace(/^0+(?=\d)/, '')
+
 const sectionKey = ({ zona, secao }: SectionSelection) =>
   `${zona.replace(/^0+(?=\d)/, '')}:${secao.replace(/^0+(?=\d)/, '')}`
 
@@ -39,7 +41,9 @@ export function VotosCandidato({
   const [candidateNumber, setCandidateNumber] = useState('')
   const [section, setSection] = useState<SectionSelection | null>(null)
   const office = data.cargos.find((c) => c.nome === officeName)
-  const candidate = office?.candidatos.find((c) => c.numero === candidateNumber)
+  const candidate = office?.candidatos.find(
+    (c) => candidateKey(c.numero) === candidateNumber,
+  )
   const options = sectionOptions(data, section)
 
   return (
@@ -69,9 +73,9 @@ export function VotosCandidato({
           Candidato
           <select
             aria-label="Candidato"
-            value={candidateNumber}
+            value={candidate?.numero ?? ''}
             disabled={!office}
-            onChange={(e) => setCandidateNumber(e.target.value)}
+            onChange={(e) => setCandidateNumber(candidateKey(e.target.value))}
           >
             <option value="">Selecionar candidato</option>
             {office?.candidatos.map((c) => (
@@ -143,7 +147,9 @@ function CandidateResult({
     ? data?.cargos.find((c) => c.nome === overallOffice.nome)
     : overallOffice
   const candidate = section
-    ? office?.candidatos.find((c) => c.numero === overallCandidate.numero)
+    ? office?.candidatos.find(
+        (c) => candidateKey(c.numero) === candidateKey(overallCandidate.numero),
+      )
     : overallCandidate
   const principal = data?.secoes.find((s) => s.tipo === 'PRINCIPAL')
   const aggregated = data?.secoes.filter((s) => s.tipo === 'AGREGADA') ?? []
@@ -151,9 +157,11 @@ function CandidateResult({
     ? 'Consultando votos da seção...'
     : !data.boletins
       ? 'Aguardando boletim desta seção.'
-      : !office
-        ? 'Este cargo não consta no boletim desta seção.'
-        : 'Este candidato não consta no boletim desta seção.'
+      : data.secoes.some((s) => s.parcial)
+        ? 'Votos não informados neste lançamento manual parcial.'
+        : !office
+          ? 'Este cargo não consta no boletim desta seção.'
+          : 'Este candidato não consta no boletim desta seção.'
 
   return (
     <div className="candidate-result" aria-live="polite" aria-busy={loading}>
@@ -172,6 +180,7 @@ function CandidateResult({
             {aggregated.map((s) => s.secao).join(', ')}). Votos conjuntos.
           </p>
         )}
+        {principal?.parcial && <p>Lançamento manual — parcial.</p>}
         {principal && (
           <Link to={`/boletins/${principal.boletim_id}`}>Ver boletim</Link>
         )}

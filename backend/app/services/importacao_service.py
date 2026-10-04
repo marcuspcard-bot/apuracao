@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timezone
+from fastapi.encoders import jsonable_encoder
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models import Boletim
 from app.schemas.boletim import BoletimDados
-from app.services.boletim_service import make_boletim
+from app.services.boletim_service import make_boletim, detail
 from app.services.bu_parser import parse_bu_text
 from app.services.duplicate_checker import check_hash, check_sections, lock_scope
 from app.services.file_hash import calculate_sha256
@@ -33,7 +35,51 @@ def parse_pdf(pdf: bytes) -> BoletimDados:
         raise HTTPException(422, {"status": "INCONSISTENTE", "problemas": [str(exc)]}) from exc
 
 
-def preview_pdf(pdf: bytes, filename: str, db: Session):
+def replacement_target(db, data, target_id):
+    old = db.scalar(select(Boletim).where(Boletim.id == target_id).with_for_update())
+    if old is None:
+        raise HTTPException(409, "O lançamento manual não existe mais. Atualize a listagem.")
+    if old.origem != "MANUAL":
+        raise HTTPException(409, "Somente um lançamento manual pode ser substituído.")
+    identity = (
+        old.eleicao_data,
+        old.eleicao_turno,
+        int(old.municipio_codigo),
+        int(old.zona),
+        int(old.secao),
+    )
+    incoming = (
+        data.eleicao.data,
+        data.eleicao.turno,
+        int(data.municipio.codigo),
+        int(data.zona),
+        int(data.secao),
+    )
+    if identity != incoming or {int(s.numero_secao) for s in old.secoes} != {
+        int(data.secao),
+        *map(int, data.secoes_agregadas),
+    }:
+        raise HTTPException(
+            422,
+            "O PDF deve corresponder à mesma eleição, município, zona, seção principal e seções agregadas do lançamento manual.",
+        )
+    imported = {
+        c.nome: {int(v.numero) for v in c.candidatos}
+        | {int(v.numero) for seat in c.vagas for v in seat.candidatos}
+        for c in data.cargos
+    }
+    for result in old.resultados:
+        if result.cargo not in imported or any(
+            int(c.numero_candidato) not in imported[result.cargo] for c in result.candidatos
+        ):
+            raise HTTPException(
+                422,
+                "O PDF não identifica todos os candidatos digitados. Confira o documento antes de substituir.",
+            )
+    return old
+
+
+def preview_pdf(pdf: bytes, filename: str, db: Session, substituir_id=None):
     file_hash = calculate_sha256(pdf)
     try:
         check_hash(db, file_hash)
@@ -43,7 +89,14 @@ def preview_pdf(pdf: bytes, filename: str, db: Session):
     data = parse_pdf(pdf)
     problems = validate_bu(data)
     filename = safe_filename(filename)
+    previous = None
+    if substituir_id:
+        try:
+            previous = detail(replacement_target(db, data, substituir_id))
+        finally:
+            db.close()
     return {
+        "substituicao": previous,
         "status": "INCONSISTENTE" if problems else "OK",
         "hash": file_hash,
         "arquivo_nome": filename,
@@ -68,7 +121,7 @@ def _recover_upload(db, data, file_hash, bucket, path, storage):
     return None
 
 
-def confirm_import(token: str, db: Session, storage):
+def confirm_import(token: str, db: Session, storage, substituir_id=None):
     pdf, filename = recover_preview(token)
     file_hash = calculate_sha256(pdf)
     data = parse_pdf(pdf)
@@ -85,8 +138,19 @@ def confirm_import(token: str, db: Session, storage):
         with db.begin():
             lock_scope(db, data, file_hash)
             check_hash(db, file_hash)
+            previous = None
+            if substituir_id:
+                old = replacement_target(db, data, substituir_id)
+                previous = (jsonable_encoder(detail(old)), old.evidencia_bucket, old.evidencia_path)
+                db.delete(old)
+                db.flush()
             check_sections(db, data)
             boletim = make_boletim(data, filename, file_hash, bucket, path)
+            if previous:
+                snapshot, boletim.evidencia_bucket, boletim.evidencia_path = previous
+                boletim.historico_manual = [
+                    {"substituido_em": datetime.now(timezone.utc).isoformat(), "boletim": snapshot}
+                ]
             db.add(boletim)
             db.flush()
             boletim_id = boletim.id

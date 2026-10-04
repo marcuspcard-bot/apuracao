@@ -12,7 +12,7 @@ import type { Preview } from '../types/boletim'
 const UNCERTAIN_SAVE =
   'Não foi possível confirmar o salvamento. O boletim pode ter sido salvo. Verifique o salvamento antes de tentar novamente.'
 
-export function useImportacao() {
+export function useImportacao(substituirId?: string) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -74,7 +74,7 @@ export function useImportacao() {
     const controller = new AbortController()
     abort.current = controller
     try {
-      const result = await sendPdf(file, controller.signal)
+      const result = await sendPdf(file, controller.signal, substituirId)
       if (controller.signal.aborted) return
       setPreview(result)
       setPdfUrl(URL.createObjectURL(file))
@@ -115,7 +115,7 @@ export function useImportacao() {
         await checkReceipt(preview.hash)
       } else {
         try {
-          const result = await confirmBoletim(preview.preview_token)
+          const result = await confirmBoletim(preview.preview_token, substituirId)
           received(result.id)
         } catch (e) {
           if (!mounted.current) return

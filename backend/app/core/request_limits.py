@@ -18,7 +18,14 @@ class ImportCapacityMiddleware:
         is_import = (
             scope["type"] == "http"
             and scope["method"] == "POST"
-            and scope["path"].rstrip("/") in ("/api/boletins/preview", "/api/boletins/confirmar")
+            and scope["path"].rstrip("/")
+            in (
+                "/api/boletins/preview",
+                "/api/boletins/confirmar",
+                "/api/boletins/manual/confirmar",
+                "/api/boletins/fotos/preview",
+                "/api/boletins/fotos/ler",
+            )
         )
         if not is_import:
             return await self.app(scope, receive, send)
@@ -48,7 +55,9 @@ class BodyLimitMiddleware:
         limit = settings.max_pdf_size_mb * 1024 * 1024
         # The preview token contains base64 PDF inside Fernet; multipart needs overhead.
         limit = (
-            limit * 2 + 8192 if scope["path"].rstrip("/").endswith("/confirmar") else limit + 65536
+            limit * 2 + 8192
+            if scope["path"].rstrip("/").endswith(("/confirmar", "/fotos/ler"))
+            else limit + 65536
         )
         if scope["path"].rstrip("/") == "/api/telao/config":
             limit = 20 * 1024 * 1024

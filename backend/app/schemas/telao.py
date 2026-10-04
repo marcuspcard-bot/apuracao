@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import Field, StrictBool, field_validator, model_validator
 
 from app.schemas.boletim import Code, StrictModel
+from app.services.candidate_identity import candidate_key
 from app.services.offices import normalize_office_name
 
 
@@ -32,7 +33,7 @@ class TelaoSave(StrictModel):
 
     @model_validator(mode="after")
     def unique_candidates(self):
-        keys = [(c.cargo, c.numero) for c in self.candidatos]
+        keys = [(c.cargo, candidate_key(c.numero)) for c in self.candidatos]
         if len(keys) != len(set(keys)):
             raise ValueError("O candidato já está selecionado para este cargo.")
         return self

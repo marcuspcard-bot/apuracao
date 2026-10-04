@@ -1,5 +1,6 @@
 export type Section = {
   numero: string
+  parcial?: boolean
   apurada: boolean
   boletim_id: string | null
   secao_principal_bu: string | null
@@ -39,6 +40,7 @@ export type SectionVotes = {
   boletins: number
   cargos: { nome: string; boletins: number; candidatos: Candidate[] }[]
   secoes: (SectionSelection & {
+    parcial?: boolean
     tipo: string
     secao_principal: string
     boletim_id: string
@@ -52,6 +54,7 @@ export type Overview = {
   consultado_em: string
   ultima_importacao: string | null
   boletins: number
+  boletins_manuais?: number
   secoes_apuradas: number
   secoes_esperadas: number | null
   secoes_pendentes: number | null

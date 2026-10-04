@@ -18,7 +18,7 @@ import type {
 } from '../types/acompanhamento'
 
 function SectionNumber({ section }: { section: Section }) {
-  const label = `${section.apurada ? 'Apurada' : 'Pendente'} - seção ${section.numero}`
+  const label = `${section.apurada ? 'Apurada' : section.parcial ? 'Manual — parcial' : 'Pendente'} - seção ${section.numero}`
   return (
     <span className="section-number-status">
       <span

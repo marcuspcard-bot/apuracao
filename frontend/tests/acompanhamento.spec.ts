@@ -876,3 +876,30 @@ test('resumo conta 253 principais sem acrescentar 81 agregadas', async ({
     registry.getByRole('img', { name: 'Apurada - seção 0254', exact: true }),
   ).toBeVisible()
 })
+
+test('zeros à esquerda preservam os votos da seção e a seleção após atualizar', async ({
+  page,
+}) => {
+  let number = '01'
+  await page.route('**/api/acompanhamento', (route) => {
+    const data = overview()
+    data.cargos[0].candidatos[0].numero = number
+    return route.fulfill({ json: data })
+  })
+  await page.route('**/api/acompanhamento/votos-secao?*', (route) => {
+    const data = overview(10)
+    data.cargos[0].candidatos[0].numero = '1'
+    return route.fulfill({
+      json: { boletins: 1, secoes: data.secoes, cargos: data.cargos },
+    })
+  })
+  await page.goto('/acompanhamento')
+  await page.getByLabel('Cargo', { exact: true }).selectOption('PRESIDENTE')
+  await page.getByLabel('Candidato', { exact: true }).selectOption('01')
+  await page.getByLabel('Seção dos votos').selectOption('13:1')
+  await expect(page.locator('.candidate-votes strong')).toHaveText('10')
+  number = '001'
+  await page.getByRole('button', { name: 'Atualizar acompanhamento' }).click()
+  await expect(page.getByLabel('Candidato', { exact: true })).toHaveValue('001')
+  await expect(page.locator('.candidate-votes strong')).toHaveText('10')
+})

@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models import Boletim, Resultado
-from app.schemas.boletim import Confirmar
+from app.schemas.boletim import Confirmar, BoletimManual, LerFotos
+from app.services.manual_service import save_manual, photos_preview
+from app.services.photo_ocr import read_photo_text
 from app.services.boletim_service import detail
 from app.services.importacao_service import confirm_import, preview_pdf
 from app.services.storage_service import StorageError, get_storage
@@ -16,18 +18,48 @@ router = APIRouter(prefix="/api/boletins", tags=["Boletins"])
 
 
 @router.post("/preview")
-def preview(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def preview(
+    file: UploadFile = File(...), substituir_id: UUID | None = None, db: Session = Depends(get_db)
+):
     if file.content_type != "application/pdf" or not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(415, "Envie um arquivo PDF com extensão .pdf e tipo application/pdf.")
     pdf = file.file.read(get_settings().max_pdf_size_mb * 1024 * 1024 + 1)
     if len(pdf) > get_settings().max_pdf_size_mb * 1024 * 1024:
         raise HTTPException(413, "O PDF excede o tamanho máximo permitido.")
-    return preview_pdf(pdf, file.filename, db)
+    return preview_pdf(pdf, file.filename, db, substituir_id)
 
 
 @router.post("/confirmar", status_code=201)
 def confirmar(body: Confirmar, db: Session = Depends(get_db), storage=Depends(get_storage)):
-    return confirm_import(body.preview_token, db, storage)
+    return confirm_import(body.preview_token, db, storage, body.substituir_id)
+
+
+@router.post("/manual/confirmar", status_code=201)
+def manual(body: BoletimManual, db: Session = Depends(get_db), storage=Depends(get_storage)):
+    return save_manual(body, db, storage)
+
+
+@router.post("/fotos/preview")
+def fotos(files: list[UploadFile] = File(...)):
+    return photos_preview(files)
+
+
+@router.post("/fotos/ler")
+def ler_fotos(body: LerFotos):
+    return read_photo_text(body.foto_token)
+
+
+@router.get("/{id}/fotos")
+def fotos_url(id: UUID, db: Session = Depends(get_db), storage=Depends(get_storage)):
+    b = find_boletim(id, db)
+    bucket, path = b.evidencia_bucket, b.evidencia_path
+    db.close()
+    if not path:
+        raise HTTPException(404, "Este boletim não possui fotos anexadas.")
+    try:
+        return {"url": storage.signed_url(bucket, path), "expires_in": 60}
+    except StorageError as exc:
+        raise HTTPException(502, "Não foi possível abrir as fotos. Tente novamente.") from exc
 
 
 @router.get("/por-hash/{file_hash}")
@@ -58,6 +90,7 @@ def list_boletins(
             key: getattr(b, key)
             for key in (
                 "id",
+                "origem",
                 "municipio_nome",
                 "municipio_codigo",
                 "zona",
@@ -99,6 +132,8 @@ def pdf_url(id: UUID, db: Session = Depends(get_db), storage=Depends(get_storage
     db.close()
     if stored is None:
         raise HTTPException(404, "Boletim não encontrado.")
+    if not stored.storage_path:
+        raise HTTPException(404, "Lançamento manual sem PDF importado. Consulte as fotos anexadas.")
     try:
         return {
             "url": storage.signed_url(stored.storage_bucket, stored.storage_path),

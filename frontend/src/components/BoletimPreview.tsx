@@ -2,7 +2,13 @@ import type { BoletimDados } from '../types/boletim'
 import { ResultadosTable } from './ResultadosTable'
 import { formatDate, formatNumber } from '../services/api'
 
-export function BoletimPreview({ dados: d }: { dados: BoletimDados }) {
+export function BoletimPreview({
+  dados: d,
+  parcial = false,
+}: {
+  dados: BoletimDados
+  parcial?: boolean
+}) {
   return (
     <div className="boletim-data">
       <section className="general-section">
@@ -33,7 +39,7 @@ export function BoletimPreview({ dados: d }: { dados: BoletimDados }) {
           </div>
           <div>
             <dt>Local de votação</dt>
-            <dd className="code">{d.local_votacao}</dd>
+            <dd className="code">{d.local_votacao ?? 'Não informado'}</dd>
           </div>
           <div>
             <dt>
@@ -80,39 +86,41 @@ export function BoletimPreview({ dados: d }: { dados: BoletimDados }) {
       {d.cargos.map((c) => (
         <ResultadosTable key={c.nome} cargo={c} />
       ))}
-      <section className="machine-section">
-        <h2>Dados da urna</h2>
-        <dl className="data-grid">
-          <div>
-            <dt>Identificação UE</dt>
-            <dd className="code">{d.urna.codigo_identificacao}</dd>
-          </div>
-          <div>
-            <dt>Abertura</dt>
-            <dd>
-              {formatDate(d.urna.data_abertura)}
-              <small>{d.urna.hora_abertura}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>Fechamento</dt>
-            <dd>
-              {formatDate(d.urna.data_fechamento)}
-              <small>{d.urna.hora_fechamento}</small>
-            </dd>
-          </div>
-        </dl>
-        <dl className="technical-data">
-          <div>
-            <dt>Código de identificação da carga</dt>
-            <dd className="code">{d.codigo_carga}</dd>
-          </div>
-          <div>
-            <dt>Assinatura QR Code</dt>
-            <dd className="code hash">{d.assinatura_qrcode}</dd>
-          </div>
-        </dl>
-      </section>
+      {!parcial && (
+        <section className="machine-section">
+          <h2>Dados da urna</h2>
+          <dl className="data-grid">
+            <div>
+              <dt>Identificação UE</dt>
+              <dd className="code">{d.urna.codigo_identificacao}</dd>
+            </div>
+            <div>
+              <dt>Abertura</dt>
+              <dd>
+                {formatDate(d.urna.data_abertura)}
+                <small>{d.urna.hora_abertura}</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Fechamento</dt>
+              <dd>
+                {formatDate(d.urna.data_fechamento)}
+                <small>{d.urna.hora_fechamento}</small>
+              </dd>
+            </div>
+          </dl>
+          <dl className="technical-data">
+            <div>
+              <dt>Código de identificação da carga</dt>
+              <dd className="code">{d.codigo_carga}</dd>
+            </div>
+            <div>
+              <dt>Assinatura QR Code</dt>
+              <dd className="code hash">{d.assinatura_qrcode}</dd>
+            </div>
+          </dl>
+        </section>
+      )}
     </div>
   )
 }

@@ -94,6 +94,13 @@ function OverviewContent({
           </p>
         )}
       </div>
+      {!!data?.boletins_manuais && (
+        <div className="notice">
+          {data.boletins_manuais} lançamento(s) manual(is) parcial(is). Os votos
+          informados entram na soma; essas seções ainda não contam como
+          totalmente apuradas.
+        </div>
+      )}
       <div className="overview-status" role="status">
         <span>
           {error

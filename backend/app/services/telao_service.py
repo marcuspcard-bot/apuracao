@@ -9,6 +9,7 @@ from app.core.locks import lock_keys
 from app.models import Boletim, CandidatoVoto, Resultado, TelaoCandidato, TelaoConfig
 from app.schemas.telao import TelaoSave
 from app.services.acompanhamento import ELEICAO_DATA, MUNICIPIO_CODIGO, TURNO
+from app.services.candidate_identity import candidate_key, candidate_key_sql
 from app.services.offices import RECOGNIZED_OFFICES
 from app.services.candidate_photos import (
     discard_photos,
@@ -44,6 +45,13 @@ def load_config(db: Session):
     )
 
 
+def unique_selections(config):
+    entries = {}
+    for entry in sorted(config.candidatos, key=lambda c: c.ordem) if config else []:
+        entries.setdefault((entry.cargo, candidate_key(entry.numero_candidato)), entry)
+    return entries
+
+
 def config_response(config: TelaoConfig | None):
     return {
         "municipio": "BACABAL",
@@ -69,7 +77,7 @@ def config_response(config: TelaoConfig | None):
                 "ativo": c.ativo,
                 "foto_url": photo_url(c),
             }
-            for c in sorted(config.candidatos, key=lambda c: c.ordem)
+            for c in unique_selections(config).values()
         ]
         if config
         else [],
@@ -77,6 +85,7 @@ def config_response(config: TelaoConfig | None):
 
 
 def candidate_sources():
+    number_key = candidate_key_sql(CandidatoVoto.numero_candidato)
     return (
         select(
             CandidatoVoto.id.label("candidato_id"),
@@ -87,9 +96,10 @@ def candidate_sources():
         .join(Resultado, Resultado.id == CandidatoVoto.resultado_id)
         .join(Boletim, Boletim.id == Resultado.boletim_id)
         .where(*bulletin_scope())
-        .distinct(Resultado.cargo, CandidatoVoto.numero_candidato)
+        .distinct(Resultado.cargo, number_key)
         .order_by(
             Resultado.cargo,
+            number_key,
             CandidatoVoto.numero_candidato,
             CandidatoVoto.nome_candidato,
             CandidatoVoto.id,
@@ -102,7 +112,10 @@ def available_candidates(db: Session, cargo: str, query: str, offset: int, limit
     if query.strip():
         statement = statement.where(
             CandidatoVoto.nome_candidato.icontains(query.strip(), autoescape=True)
-            | CandidatoVoto.numero_candidato.contains(query.strip(), autoescape=True)
+            | candidate_key_sql(CandidatoVoto.numero_candidato).contains(
+                candidate_key(query.strip()) if query.strip().isdecimal() else query.strip(),
+                autoescape=True,
+            )
         )
     rows = db.execute(statement.offset(offset).limit(limit + 1)).mappings().all()
     return {"candidatos": [dict(row) for row in rows[:limit]], "tem_mais": len(rows) > limit}
@@ -132,14 +145,16 @@ def _save_config(db: Session, body: TelaoSave, storage, uploaded, obsolete):
             raise HTTPException(
                 409, "A configuração mudou em outra janela. Recarregue antes de salvar."
             )
-        existing = {(c.cargo, c.numero_candidato): c for c in config.candidatos} if config else {}
-        keys = [(c.cargo, c.numero) for c in body.candidatos]
+        existing = unique_selections(config)
+        keys = [(c.cargo, candidate_key(c.numero)) for c in body.candidatos]
         sources = (
             {
-                (row.cargo, row.numero): row
+                (row.cargo, candidate_key(row.numero)): row
                 for row in db.execute(
                     candidate_sources().where(
-                        tuple_(Resultado.cargo, CandidatoVoto.numero_candidato).in_(keys)
+                        tuple_(
+                            Resultado.cargo, candidate_key_sql(CandidatoVoto.numero_candidato)
+                        ).in_(keys)
                     )
                 )
             }
@@ -170,7 +185,7 @@ def _save_config(db: Session, body: TelaoSave, storage, uploaded, obsolete):
         config.updated_at = now
         selected = []
         for order, item in enumerate(body.candidatos, start=1):
-            key = (item.cargo, item.numero)
+            key = (item.cargo, candidate_key(item.numero))
             entry = existing.get(key)
             if entry is None:
                 source = sources[key]
@@ -192,8 +207,8 @@ def _save_config(db: Session, body: TelaoSave, storage, uploaded, obsolete):
             selected.append(entry)
         obsolete.extend(
             (entry.foto_bucket, entry.foto_path)
-            for key, entry in existing.items()
-            if key not in keys and entry.foto_path
+            for entry in config.candidatos
+            if entry not in selected and entry.foto_path
         )
         config.candidatos = selected
         db.flush()

@@ -1,7 +1,8 @@
 from datetime import date, time
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from uuid import UUID
 
 Code = Annotated[str, Field(pattern=r"^\d{1,20}$")]
 Count = Annotated[int, Field(ge=0, le=10000000)]
@@ -82,4 +83,43 @@ class BoletimDados(StrictModel):
 
 
 class Confirmar(StrictModel):
+    substituir_id: UUID | None = None
     preview_token: str = Field(min_length=80, max_length=75000000)
+
+
+class CandidatoManual(Candidato):
+    cargo: str = Field(min_length=1, max_length=100)
+
+
+class BoletimManual(StrictModel):
+    eleicao: Eleicao
+    municipio: Municipio
+    zona: Code
+    secao: Code
+    secoes_agregadas: list[Code] = Field(default_factory=list, max_length=1000)
+    candidatos: list[CandidatoManual] = Field(min_length=1, max_length=200)
+    foto_token: str | None = Field(default=None, min_length=80, max_length=75000000)
+
+    @model_validator(mode="after")
+    def validate_entries(self):
+        from app.services.offices import normalize_office_name
+
+        keys = set()
+        for c in self.candidatos:
+            office = normalize_office_name(c.cargo)
+            if not office:
+                raise ValueError("Cargo inválido.")
+            c.cargo = office
+            c.nome = c.nome.strip()
+            key = (office, str(int(c.numero)))
+            if not c.nome or key in keys:
+                raise ValueError("Nome vazio ou candidato repetido no mesmo cargo.")
+            keys.add(key)
+        sections = [int(self.secao), *map(int, self.secoes_agregadas)]
+        if len(sections) != len(set(sections)):
+            raise ValueError("Seção repetida.")
+        return self
+
+
+class LerFotos(StrictModel):
+    foto_token: str = Field(min_length=80, max_length=75000000)

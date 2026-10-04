@@ -3,6 +3,7 @@ from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -31,23 +32,27 @@ class Boletim(Base):
     municipio_codigo: Mapped[str] = mapped_column(String(20))
     municipio_nome: Mapped[str] = mapped_column(String(200))
     zona: Mapped[str] = mapped_column(String(20))
-    local_votacao: Mapped[str] = mapped_column(String(20))
+    local_votacao: Mapped[str | None] = mapped_column(String(20))
     secao: Mapped[str] = mapped_column(String(20))
     quantidade_secoes_agregadas: Mapped[int]
-    eleitores_aptos: Mapped[int]
-    comparecimento: Mapped[int]
-    faltosos: Mapped[int]
-    codigo_urna: Mapped[str] = mapped_column(String(20))
-    data_abertura: Mapped[date]
-    hora_abertura: Mapped[time]
-    data_fechamento: Mapped[date]
-    hora_fechamento: Mapped[time]
-    assinatura_qrcode: Mapped[str]
-    codigo_carga: Mapped[str] = mapped_column(String(100))
+    eleitores_aptos: Mapped[int | None]
+    comparecimento: Mapped[int | None]
+    faltosos: Mapped[int | None]
+    codigo_urna: Mapped[str | None] = mapped_column(String(20))
+    data_abertura: Mapped[date | None]
+    hora_abertura: Mapped[time | None]
+    data_fechamento: Mapped[date | None]
+    hora_fechamento: Mapped[time | None]
+    assinatura_qrcode: Mapped[str | None]
+    codigo_carga: Mapped[str | None] = mapped_column(String(100))
     arquivo_nome_original: Mapped[str] = mapped_column(String(255))
     arquivo_hash: Mapped[str] = mapped_column(String(64), unique=True)
     storage_bucket: Mapped[str] = mapped_column(String(100))
     storage_path: Mapped[str] = mapped_column(String(500))
+    origem: Mapped[str] = mapped_column(String(10), default="PDF", server_default="PDF")
+    historico_manual: Mapped[list[dict]] = mapped_column(JSONB, default=list, server_default="[]")
+    evidencia_bucket: Mapped[str | None] = mapped_column(String(100))
+    evidencia_path: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

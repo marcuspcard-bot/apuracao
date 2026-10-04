@@ -20,7 +20,7 @@ class Resultado(Base):
     )
     cargo: Mapped[str] = mapped_column(String(100))
     votos_nominais: Mapped[int | None]
-    votos_legenda: Mapped[int] = mapped_column(default=0, server_default="0")
+    votos_legenda: Mapped[int | None] = mapped_column(default=0, server_default="0")
     brancos: Mapped[int | None]
     nulos: Mapped[int | None]
     total_apurado: Mapped[int | None]

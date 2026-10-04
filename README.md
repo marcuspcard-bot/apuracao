@@ -422,3 +422,35 @@ Referências oficiais: [Postgres Changes no Supabase Realtime](https://supabase.
 `frontend/tests/telao.spec.ts` cobre configuração sem login, busca e ordem, SSE real de configuração, importação confirmada atualizando o telão, debounce, polling, falha temporária sem zerar votos, estados vazios, rotação, Fullscreen API e layouts 1920x1080, 1366x768, 3840x2160, tablet e celular. PDFs e respostas sintéticas desses testes não são inseridos no Supabase.
 
 `backend/tests/test_candidate_photos.py` e `test_photo_migration.py` verificam validação, normalização, isolamento de cargo/candidato, substituição, remoção, falhas, preservação da seleção e migração de dados antigos. Os testes de Storage cobrem bucket privado e códigos de erro do Supabase. Os testes de navegador também cobrem prévia, persistência, troca e remoção da foto e detectam a área efetiva dos textos, inclusive números alinhados à direita.
+
+### Contingência: votos manuais e fotos do BU
+
+Em **Importar → Digitar candidatos específicos e anexar fotos do BU**, informe a
+identificação completa da eleição/seção (incluindo todas as seções agregadas) e
+somente os candidatos de interesse. Votos em branco não são gravados; zero precisa
+ser informado explicitamente. O registro é **Manual — parcial** e seus votos entram
+nos totais, mas a seção não conta como totalmente apurada.
+
+Até dez imagens JPEG, PNG ou WebP podem acompanhar a digitação. O servidor valida
+as imagens, aplica limites de tamanho/resolução e reúne as fotos em um PDF privado.
+Esse arquivo serve para conferência. **Tentar ler texto das fotos** usa OCR local
+(Tesseract com idioma português) e exibe o texto reconhecido para consulta, sem
+preencher ou salvar votos automaticamente. Confira cada valor na imagem. Se a
+leitura falhar, a digitação e o anexo continuam disponíveis. Não há decodificação
+de QR Code por foto nesta versão. Converter as fotos em PDF não cria os dados
+eleitorais digitais exigidos pelo importador. A imagem Docker instala Tesseract;
+em instalações sem Docker, instale `tesseract-ocr` e `tesseract-ocr-por` no servidor.
+
+Nos detalhes do lançamento manual, **Substituir por PDF** apresenta a comparação
+dos candidatos digitados com o documento importado. A confirmação exige a mesma
+eleição, município, zona, seção principal e conjunto de agregadas, além de localizar
+todos os candidatos manuais no documento. Os votos antigos são removidos e os novos
+gravados na mesma transação. Falhas deixam o lançamento manual intacto. O novo
+registro conserva o histórico manual e o PDF das fotos, fora da soma dos votos.
+Importar normalmente uma seção já digitada continua bloqueado, exigindo a ação
+explícita de substituição.
+
+Antes de iniciar a versão atualizada do backend, execute `alembic upgrade head`
+na pasta `backend` para aplicar a migração `f64c820ab931`. A migração mantém os
+boletins existentes classificados como PDF e permite dados não informados nos
+lançamentos parciais. O downgrade exige que não existam campos não informados.
